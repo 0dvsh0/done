@@ -1,0 +1,16 @@
+# Dependencies and build output
+node_modules/
+out/
+dist/
+release/
+
+# Local env
+.env
+.env.*
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Entire keeps its own state out of the tree
+.entire/cache/

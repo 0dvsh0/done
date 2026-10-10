@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Today — Done.</title>
+  <meta name="description" content="Interactive demo of Done, the to-do list that finishes itself.">
+  <meta name="theme-color" content="#09090a">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2309090a'/><circle cx='16' cy='16' r='6' fill='%23ededee'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;450;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body class="app">
+  <div class="grain" aria-hidden="true"></div>
+
+  <div class="shell" id="app-shell">
+    <!-- ============================== LIST ============================== -->
+    <section class="column" id="list-column" aria-label="Your list">
+      <header class="topbar">
+        <a href="index.html" class="wordmark" aria-label="Done, back to home">done<i></i></a>
+        <div class="topbar-actions">
+          <button type="button" class="icon-btn" id="pause-all-btn" aria-label="Pause everything" title="Pause everything">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 5.5v9M12.5 5.5v9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <span class="icon-btn-label">Pause all</span>
+          </button>
+          <button type="button" class="icon-btn" id="limits-btn" aria-label="Limits" title="What it can do on its own">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5 15.5 5.6v4.1c0 3.2-2.3 5.7-5.5 6.8-3.2-1.1-5.5-3.6-5.5-6.8V5.6L10 3.5Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+            <span class="icon-btn-label">Limits</span>
+          </button>
+          <button type="button" class="icon-btn" id="keys-btn" aria-label="Keyboard shortcuts" title="Shortcuts (?)">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="6" width="14" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 12h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="day">
+        <h1 class="day-title voice" id="day-title">Today</h1>
+        <p class="day-summary" id="day-summary" aria-live="polite">Getting things ready…</p>
+      </div>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <span class="composer-dot" aria-hidden="true"></span>
+        <label for="composer-input" class="visually-hidden">What needs doing?</label>
+        <input id="composer-input" type="text" placeholder="What needs doing?" maxlength="140">
+        <span class="composer-hint" aria-hidden="true"><kbd>N</kbd></span>
+        <div class="composer-extras" id="composer-extras">
+          <button type="button" class="pill" data-extra="when">By <span>whenever</span></button>
+          <button type="button" class="pill" data-extra="budget">Up to <span>no spending</span></button>
+          <button type="button" class="pill" data-extra="ask">Ask me <span>before anything big</span></button>
+          <button type="submit" class="pill pill-go">Hand it off <kbd>↵</kbd></button>
+        </div>
+      </form>
+
+      <div class="lists" id="lists">
+        <section class="group" id="group-needs" aria-labelledby="group-needs-title" hidden>
+          <h2 class="group-title" id="group-needs-title"><span class="group-mark needs" aria-hidden="true"></span>Needs you</h2>
+          <ol class="tasks" id="tasks-needs"></ol>
+        </section>
+        <section class="group" id="group-going" aria-labelledby="group-going-title">
+          <h2 class="group-title" id="group-going-title">Going</h2>
+          <ol class="tasks" id="tasks-going"></ol>
+        </section>
+        <section class="group group-done" id="group-done" aria-labelledby="group-done-title" hidden>
+          <h2 class="group-title">
+            <button type="button" id="group-done-title" class="group-toggle" aria-expanded="true">
+              Done today <span class="num" id="done-count">0</span>
+              <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="m3 4.5 3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+          </h2>
+          <ol class="tasks" id="tasks-done"></ol>
+        </section>
+      </div>
+
+      <footer class="ledger" id="ledger" aria-live="polite">
+        <span id="ledger-spend">Spent $0 today</span>
+        <span class="ledger-sep" aria-hidden="true">·</span>
+        <span id="ledger-time">Saved you about 0 minutes</span>
+      </footer>
+    </section>
+
+    <!-- ============================== DETAIL ============================== -->
+    <aside class="detail" id="detail" aria-label="Task details" aria-hidden="true">
+      <div class="detail-inner" id="detail-inner">
+        <header class="detail-top">
+          <button type="button" class="icon-btn" id="detail-close" aria-label="Close details"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8M14 6l-8 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+          <span class="detail-state" id="detail-state"></span>
+          <span class="detail-nav"><kbd>J</kbd><kbd>K</kbd></span>
+        </header>
+
+        <div class="detail-head">
+          <svg class="dot dot-xl" id="detail-dot" viewBox="0 0 20 20" aria-hidden="true"><circle class="dot-track" cx="10" cy="10" r="8"/><circle class="dot-arc" cx="10" cy="10" r="8"/><circle class="dot-core" cx="10" cy="10"/></svg>
+          <h2 class="detail-title" id="detail-title"></h2>
+        </div>
+        <p class="detail-now voice" id="detail-now" aria-live="polite"></p>
+        <p class="detail-meta num" id="detail-meta"></p>
+
+        <!-- Needs-you card -->
+        <div class="ask" id="detail-ask" hidden></div>
+
+        <!-- Controls -->
+        <div class="controls" id="detail-controls" role="toolbar" aria-label="Task controls">
+          <button type="button" class="ctrl" id="ctrl-pause"><span class="ctrl-label">Pause</span><kbd>Space</kbd></button>
+          <button type="button" class="ctrl" id="ctrl-steer"><span class="ctrl-label">Steer</span><kbd>S</kbd></button>
+          <button type="button" class="ctrl" id="ctrl-take"><span class="ctrl-label">Take over</span><kbd>T</kbd></button>
+          <button type="button" class="ctrl ctrl-quiet" id="ctrl-stop"><span class="ctrl-label">Stop</span></button>
+        </div>
+
+        <form class="steer" id="steer-form" hidden>
+          <label for="steer-input" class="visually-hidden">Tell it what to change</label>
+          <input id="steer-input" type="text" placeholder="Say what to change — “cheaper”, “not Fridays”, “ask Sam first”" maxlength="120">
+          <button type="submit" class="btn btn-solid steer-go">Tell it</button>
+        </form>
+
+        <!-- Receipt (done) -->
+        <section class="receipt" id="detail-receipt" hidden aria-label="Receipt"></section>
+
+        <!-- Plan -->
+        <section class="block" aria-labelledby="plan-title">
+          <h3 class="block-title" id="plan-title">The plan</h3>
+          <ol class="plan" id="detail-plan"></ol>
+        </section>
+
+        <!-- Story -->
+        <section class="block" aria-labelledby="story-title">
+          <div class="block-head">
+            <h3 class="block-title" id="story-title">What happened</h3>
+            <button type="button" class="switch" id="under-toggle" role="switch" aria-checked="false">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+              <span class="switch-label">Show what’s underneath</span>
+            </button>
+          </div>
+          <ol class="story" id="detail-story"></ol>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ============================== LIMITS SHEET ============================== -->
+  <div class="scrim" id="scrim" hidden></div>
+  <dialog class="sheet-modal" id="limits-sheet" aria-labelledby="limits-title">
+    <header>
+      <h2 id="limits-title" class="voice">What it can do on its own</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8M14 6l-8 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+    </header>
+    <div class="limit">
+      <div class="limit-copy"><strong>Spend without asking</strong><span>Anything above this comes to you first.</span></div>
+      <div class="seg" role="radiogroup" aria-label="Spend without asking" id="spend-seg">
+        <button type="button" role="radio" aria-checked="true" data-v="0">$0</button>
+        <button type="button" role="radio" aria-checked="false" data-v="25">$25</button>
+        <button type="button" role="radio" aria-checked="false" data-v="100">$100</button>
+      </div>
+    </div>
+    <div class="limit">
+      <div class="limit-copy"><strong>Show me messages before they’re sent</strong><span>Emails, texts, and forms written in your name.</span></div>
+      <button type="button" class="switch" role="switch" aria-checked="true" data-limit="messages"><span class="switch-track"><span class="switch-thumb"></span></span></button>
+    </div>
+    <div class="limit">
+      <div class="limit-copy"><strong>Never do anything that can’t be undone</strong><span>Cancelling, deleting, signing. Always asks. This one stays on.</span></div>
+      <button type="button" class="switch is-locked" role="switch" aria-checked="true" aria-disabled="true"><span class="switch-track"><span class="switch-thumb"></span></span></button>
+    </div>
+    <div class="limit">
+      <div class="limit-copy"><strong>Quiet hours</strong><span>Hold questions between 10pm and 8am.</span></div>
+      <button type="button" class="switch" role="switch" aria-checked="false" data-limit="quiet"><span class="switch-track"><span class="switch-thumb"></span></span></button>
+    </div>
+    <p class="sheet-foot">Every step is recorded, so you can always see exactly what happened and why.</p>
+  </dialog>
+
+  <!-- ============================== SHORTCUTS SHEET ============================== -->
+  <dialog class="sheet-modal sheet-keys" id="keys-sheet" aria-labelledby="keys-title">
+    <header>
+      <h2 id="keys-title" class="voice">Shortcuts</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8M14 6l-8 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+    </header>
+    <dl class="keys">
+      <div><dt>Write something new</dt><dd><kbd>N</kbd></dd></div>
+      <div><dt>Move through your list</dt><dd><kbd>J</kbd><kbd>K</kbd></dd></div>
+      <div><dt>Open</dt><dd><kbd>↵</kbd></dd></div>
+      <div><dt>Pause or resume</dt><dd><kbd>Space</kbd></dd></div>
+      <div><dt>Steer</dt><dd><kbd>S</kbd></dd></div>
+      <div><dt>Take over</dt><dd><kbd>T</kbd></dd></div>
+      <div><dt>Undo the last thing</dt><dd><kbd>⌘</kbd><kbd>Z</kbd></dd></div>
+      <div><dt>Close</dt><dd><kbd>Esc</kbd></dd></div>
+    </dl>
+  </dialog>
+
+  <!-- ============================== TOAST ============================== -->
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+    <span id="toast-text"></span>
+    <button type="button" id="toast-undo" class="toast-undo">Undo</button>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

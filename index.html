@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Done. — The to‑do list that finishes itself</title>
+  <meta name="description" content="Write it down. It gets done. A to-do list where an agent does the work, tells you what it's doing in plain words, and only interrupts when it truly needs you.">
+  <meta name="theme-color" content="#09090a">
+  <meta property="og:title" content="Done. — The to‑do list that finishes itself">
+  <meta property="og:description" content="Write it down. It gets done.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2309090a'/><circle cx='16' cy='16' r='6' fill='%23ededee'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;450;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/landing.css">
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <!-- ============================== NAV ============================== -->
+  <header id="site-header" class="site-header">
+    <nav class="nav" aria-label="Primary">
+      <a href="#top" class="wordmark" aria-label="Done, home">done<i></i></a>
+      <div class="nav-links">
+        <a href="#language">How it speaks</a>
+        <a href="#control">Control</a>
+        <a href="#pricing">Pricing</a>
+      </div>
+      <a href="app.html" class="btn btn-ghost nav-cta">Open the demo</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <!-- ============================== HERO ============================== -->
+    <section id="hero-section" class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow reveal">A to‑do list that finishes itself</p>
+      <h1 id="hero-title" class="hero-title voice reveal">
+        Write it down.<br>
+        It gets done<span class="hero-period" aria-hidden="true"><svg class="dot dot-hero" viewBox="0 0 20 20" data-state="working"><circle class="dot-track" cx="10" cy="10" r="8"/><circle class="dot-arc" cx="10" cy="10" r="8"/><circle class="dot-core" cx="10" cy="10"/></svg></span><span class="visually-hidden">.</span>
+      </h1>
+      <p class="hero-sub reveal">
+        You write what you need. An agent does the work, tells you what it’s doing in plain words,
+        and only interrupts when it truly needs you.
+      </p>
+      <div class="hero-actions reveal">
+        <a href="app.html" class="btn btn-solid">Open the demo</a>
+        <a href="#how" class="btn btn-text">See how it works <span aria-hidden="true">↓</span></a>
+      </div>
+
+      <!-- Live hero object: a real-feeling list that plays itself -->
+      <figure id="hero-demo" class="hero-demo reveal" aria-label="A short demonstration of tasks finishing themselves">
+        <div class="sheet">
+          <div class="sheet-head">
+            <span class="sheet-day" id="hero-day">Today</span>
+            <span class="sheet-count num" id="hero-count">2 of 3 still going</span>
+          </div>
+          <ol class="sheet-list" id="hero-list"></ol>
+          <div class="sheet-compose">
+            <span class="compose-caret" aria-hidden="true"></span>
+            <span class="compose-ghost" id="hero-typing">What needs doing?</span>
+          </div>
+        </div>
+        <figcaption class="hero-caption">This is a recording of no one. Nobody is touching anything.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ============================== MANIFESTO ============================== -->
+    <section id="how" class="manifesto" aria-labelledby="manifesto-title">
+      <h2 id="manifesto-title" class="visually-hidden">The idea</h2>
+      <p class="manifesto-line voice reveal">
+        A sentence is finished when it gets its period.
+        <span class="dim">So is a task.</span>
+      </p>
+      <p class="manifesto-body reveal">
+        Every item in Done starts as an open circle. As the work happens, the circle fills.
+        When it’s finished, it closes into a period. That’s the whole interface. Everything else stays out of your way.
+      </p>
+    </section>
+
+    <!-- ============================== FIVE STATES ============================== -->
+    <section id="states" class="states" aria-labelledby="states-title">
+      <header class="section-head reveal">
+        <span class="section-index num">01</span>
+        <h2 id="states-title">One shape. Five meanings.</h2>
+        <p>You never have to read a status. You just glance.</p>
+      </header>
+      <ul class="state-row reveal" role="list">
+        <li class="state-item" tabindex="0">
+          <svg class="dot dot-lg" viewBox="0 0 20 20" data-state="waiting"><circle class="dot-track" cx="10" cy="10" r="8"/><circle class="dot-arc" cx="10" cy="10" r="8"/><circle class="dot-core" cx="10" cy="10"/></svg>
+          <strong>Waiting</strong>
+          <span>Written down. It’ll start soon, or when you said.</span>
+        </li>
+        <li class="state-item" tabindex="0">
+          <svg class="dot dot-lg" viewBox="0 0 20 20" data-state="working" style="--p:.42"><circle class="dot-track" cx="10" cy="10" r="8"/><circle class="dot-arc" cx="10" cy="10" r="8" style="stroke-dashoffset:29"/><circle class="dot-core" cx="10" cy="10"/></svg>
+          <strong>On it</strong>
+          <span>The ring is how far along. The pulse means it’s alive.</span>
+        </li>
+        <li class="state-item" tabindex="0">
+          <svg class="dot dot-lg" viewBox="0 0 20 20" data-state="needs"><circle class="dot-track" cx="10" cy="10" r="8"/><circle class="dot-arc" cx="10" cy="10" r="8" style="stroke-dashoffset:22"/><circle class="dot-core" cx="10" cy="10"/></svg>
+          <strong class="t-needs">Needs you</strong>
+          <span>The only colour that asks for attention. It’s rare on purpose.</span>
+        </li>
+        <li class="state-item" tabindex="0">
+          <svg class="dot dot-lg" viewBox="0 0 20 20" data-state="snag"><circle class="dot-track" cx="10" cy="10" r="8"/><circle class="dot-arc" cx="10" cy="10" r="8" style="stroke-dashoffset:34"/><circle class="dot-core" cx="10" cy="10"/></svg>
+          <strong class="t-snag">Hit a snag</strong>
+          <span>Something didn’t work. It’s already trying another way.</span>
+        </li>
+        <li class="state-item" tabindex="0">
+          <svg class="dot dot-lg" viewBox="0 0 20 20" data-state="done"><circle class="dot-track" cx="10" cy="10" r="8"/><circle class="dot-arc" cx="10" cy="10" r="8"/><circle class="dot-core" cx="10" cy="10"/></svg>
+          <strong>Done.</strong>
+          <span>Closed into a period. With a receipt, so you can check.</span>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ============================== LANGUAGE ============================== -->
+    <section id="language" class="language" aria-labelledby="language-title">
+      <header class="section-head reveal">
+        <span class="section-index num">02</span>
+        <h2 id="language-title">It talks like a person. Not like a machine.</h2>
+        <p>Underneath every sentence is the full record of what happened. You only see it if you ask.</p>
+      </header>
+
+      <div class="narration reveal">
+        <div class="narration-head">
+          <span class="narration-task">Book a dentist cleaning for Saturday</span>
+          <button type="button" id="machinery-toggle" class="switch" role="switch" aria-checked="false">
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+            <span class="switch-label">Show what’s underneath</span>
+          </button>
+        </div>
+        <ol class="narration-list" id="narration-list">
+          <li><time class="num">9:02</time><p>Looked for dentists near you that are open on Saturday.</p><code>tool.search_places(q="dentist", open="sat") → 7 results · 1.2s</code></li>
+          <li><time class="num">9:02</time><p>Kept the three that take your insurance.</p><code>llm.filter(insurer="Delta PPO") → 3 kept · 412 tokens</code></li>
+          <li><time class="num">9:03</time><p>Brightside’s booking page wouldn’t load, so I checked their other site.</p><code>browser.open → 503 · retry(alt_url) → 200 · recovered</code></li>
+          <li><time class="num">9:04</time><p>Found an opening at 10:30. Waiting for your okay before booking.</p><code>policy.requires_approval(action="book", cost=$85) → paused</code></li>
+        </ol>
+        <p class="narration-foot">Every line is traced end to end with <a href="https://neatlogs.com" target="_blank" rel="noopener">neatlogs</a>, then rewritten in plain words.</p>
+      </div>
+    </section>
+
+    <!-- ============================== ASKS ============================== -->
+    <section id="asks" class="split" aria-labelledby="asks-title">
+      <div class="split-copy reveal">
+        <span class="section-index num">03</span>
+        <h2 id="asks-title">It asks before it spends, sends, or signs.</h2>
+        <p>Three things always come back to you: spending money, speaking in your name, and anything that can’t be undone. You can loosen that later. It starts careful.</p>
+        <ul class="rules" role="list">
+          <li><span class="rule-mark" aria-hidden="true"></span>Spend up to <strong class="num">$0</strong> without asking</li>
+          <li><span class="rule-mark" aria-hidden="true"></span>Always show me a message before it’s sent</li>
+          <li><span class="rule-mark" aria-hidden="true"></span>Never cancel, delete, or sign anything on its own</li>
+        </ul>
+      </div>
+      <div class="split-visual reveal">
+        <article class="ask-card" id="ask-demo">
+          <header>
+            <svg class="dot" viewBox="0 0 20 20" data-state="needs"><circle class="dot-track" cx="10" cy="10" r="8"/><circle class="dot-arc" cx="10" cy="10" r="8" style="stroke-dashoffset:14"/><circle class="dot-core" cx="10" cy="10"/></svg>
+            <span>Needs you · Dentist</span>
+          </header>
+          <p class="ask-question">Book Saturday at 10:30 with Dr. Okafor at Brightside Dental?</p>
+          <dl class="ask-facts">
+            <div><dt>Cost</dt><dd class="num">$85 · insurance covers $60</dd></div>
+            <div><dt>Distance</dt><dd>12 minutes away</dd></div>
+            <div><dt>If you say no</dt><dd>I’ll look at Sunday instead</dd></div>
+          </dl>
+          <div class="ask-actions">
+            <button type="button" class="btn btn-solid" data-ask="yes">Book it</button>
+            <button type="button" class="btn btn-ghost" data-ask="other">Other times</button>
+            <button type="button" class="btn btn-text" data-ask="later">Not now</button>
+          </div>
+          <p class="ask-result" id="ask-result" aria-live="polite"></p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================== RECOVERY ============================== -->
+    <section id="recovery" class="split split-reverse" aria-labelledby="recovery-title">
+      <div class="split-copy reveal">
+        <span class="section-index num">04</span>
+        <h2 id="recovery-title">When something breaks, it tells you. Then it fixes it.</h2>
+        <p>Websites go down. Forms change. Passwords expire. Done doesn’t pretend. It says what went wrong in one line, tries another way, and only asks you if it runs out of good options.</p>
+      </div>
+      <div class="split-visual reveal">
+        <ol class="recovery" id="recovery-demo" aria-label="Recovery example: cancelling a gym membership">
+          <li data-tone="plain"><svg class="dot" viewBox="0 0 20 20" data-state="working"><circle class="dot-track" cx="10" cy="10" r="8"/><circle class="dot-arc" cx="10" cy="10" r="8" style="stroke-dashoffset:38"/><circle class="dot-core" cx="10" cy="10"/></svg><p>Signing in to your gym account.</p></li>
+          <li data-tone="snag"><svg class="dot" viewBox="0 0 20 20" data-state="snag"><circle class="dot-track" cx="10" cy="10" r="8"/><circle class="dot-arc" cx="10" cy="10" r="8" style="stroke-dashoffset:34"/><circle class="dot-core" cx="10" cy="10"/></svg><p>The cancel button is hidden for online accounts. <span class="dim">Trying another way.</span></p></li>
+          <li data-tone="plain"><svg class="dot" viewBox="0 0 20 20" data-state="working"><circle class="dot-track" cx="10" cy="10" r="8"/><circle class="dot-arc" cx="10" cy="10" r="8" style="stroke-dashoffset:22"/><circle class="dot-core" cx="10" cy="10"/></svg><p>Their terms say a written request works. Drafted one for you to approve.</p></li>
+          <li data-tone="done"><svg class="dot" viewBox="0 0 20 20" data-state="done"><circle class="dot-track" cx="10" cy="10" r="8"/><circle class="dot-arc" cx="10" cy="10" r="8"/><circle class="dot-core" cx="10" cy="10"/></svg><p>Cancelled. Confirmation saved. <span class="dim">You’ll save $39 a month.</span></p></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============================== CONTROL ============================== -->
+    <section id="control" class="control" aria-labelledby="control-title">
+      <header class="section-head reveal">
+        <span class="section-index num">05</span>
+        <h2 id="control-title">Four words. Total control.</h2>
+        <p>Never more than one tap away, on every task, at every moment.</p>
+      </header>
+      <ul class="verbs reveal" role="list">
+        <li>
+          <span class="verb voice">Pause</span>
+          <p>Stops right where it is. Nothing is lost. Pick up whenever.</p>
+          <kbd>Space</kbd>
+        </li>
+        <li>
+          <span class="verb voice">Steer</span>
+          <p>Say “actually, cheaper” or “not Fridays.” It adjusts mid‑stride.</p>
+          <kbd>S</kbd>
+        </li>
+        <li>
+          <span class="verb voice">Take over</span>
+          <p>Do the next bit yourself. It hands you everything it knows.</p>
+          <kbd>T</kbd>
+        </li>
+        <li>
+          <span class="verb voice">Undo</span>
+          <p>Anything it did can be reversed, or it would have asked first.</p>
+          <kbd>⌘Z</kbd>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ============================== RECEIPT ============================== -->
+    <section id="receipt" class="split" aria-labelledby="receipt-title">
+      <div class="split-copy reveal">
+        <span class="section-index num">06</span>
+        <h2 id="receipt-title">Every period comes with a receipt.</h2>
+        <p>“Done” should be something you can check, not something you have to trust. Each finished task keeps proof: what it did, what it cost, and how to reverse it.</p>
+      </div>
+      <div class="split-visual reveal">
+        <article class="receipt-card" aria-label="Example receipt">
+          <header>
+            <svg class="dot" viewBox="0 0 20 20" data-state="done"><circle class="dot-track" cx="10" cy="10" r="8"/><circle class="dot-arc" cx="10" cy="10" r="8"/><circle class="dot-core" cx="10" cy="10"/></svg>
+            <div>
+              <strong>Renewed car insurance.</strong>
+              <span>Finished Tuesday, 4:12 pm · took 18 minutes</span>
+            </div>
+          </header>
+          <dl class="receipt-lines">
+            <div><dt>What changed</dt><dd>Switched to the same cover for less</dd></div>
+            <div><dt>You save</dt><dd class="num">$212 a year</dd></div>
+            <div><dt>It spent</dt><dd class="num">$0.00 · you approved the switch</dd></div>
+            <div><dt>Proof</dt><dd><span class="chip">policy.pdf</span><span class="chip">confirmation email</span></dd></div>
+            <div><dt>Reversible until</dt><dd>Nov 2 · one tap</dd></div>
+          </dl>
+          <footer>
+            <span class="tear" aria-hidden="true"></span>
+            <span class="receipt-check">Checked twice before it called this done.</span>
+          </footer>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================== PRICING ============================== -->
+    <section id="pricing" class="pricing" aria-labelledby="pricing-title">
+      <header class="section-head reveal">
+        <span class="section-index num">07</span>
+        <h2 id="pricing-title">Pay for periods. Not for effort.</h2>
+        <p>If it didn’t get done, it doesn’t count. That’s the only fair way to sell an agent.</p>
+      </header>
+      <div class="plans reveal">
+        <article class="plan">
+          <h3>Free</h3>
+          <p class="plan-price"><span class="num">0</span></p>
+          <p class="plan-unit">10 things done a month</p>
+          <ul role="list"><li>Everything asks first</li><li>Receipts for 30 days</li></ul>
+        </article>
+        <article class="plan plan-main">
+          <h3>Personal</h3>
+          <p class="plan-price"><span class="cur">$</span><span class="num">12</span></p>
+          <p class="plan-unit">100 things done a month</p>
+          <ul role="list"><li>Your own spending limits</li><li>Receipts forever</li><li>Recurring tasks</li></ul>
+        </article>
+        <article class="plan">
+          <h3>Household</h3>
+          <p class="plan-price"><span class="cur">$</span><span class="num">29</span></p>
+          <p class="plan-unit">Shared list, up to 5 people</p>
+          <ul role="list"><li>Who-approves-what rules</li><li>Shared receipts</li></ul>
+        </article>
+      </div>
+      <p class="pricing-note reveal">Unfinished tasks are never charged. Modeled in <a href="https://cfo.ai" target="_blank" rel="noopener">cfo.ai</a> at a 78% margin on Personal, so the price stays honest.</p>
+    </section>
+
+    <!-- ============================== MADE IN THE OPEN ============================== -->
+    <section id="built" class="built" aria-labelledby="built-title">
+      <header class="section-head reveal">
+        <span class="section-index num">08</span>
+        <h2 id="built-title">Made in the open, in 48 hours.</h2>
+        <p>Built for <a href="https://neatlogs.com/hackathon" target="_blank" rel="noopener">#neatHack</a>. An agent you’d trust to run without you watching, so you never have to.</p>
+      </header>
+      <ul class="built-list reveal" role="list">
+        <li>
+          <span class="built-name">neatlogs</span>
+          <p>Traces every step the agent takes. Those traces are what we translate into the sentences you read, and how we measured each fix.</p>
+        </li>
+        <li>
+          <span class="built-name">Entire</span>
+          <p>Saves the reasoning behind every code change, so the agent’s behaviour has a history you can review.</p>
+        </li>
+        <li>
+          <span class="built-name">cfo.ai</span>
+          <p>Shaped the pay-per-done pricing: cost per finished task, margins, and runway.</p>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ============================== FINAL CTA ============================== -->
+    <section id="start" class="final" aria-labelledby="final-title">
+      <h2 id="final-title" class="final-title voice reveal">Start with one thing<span class="final-dot" aria-hidden="true"></span></h2>
+      <form id="final-form" class="final-form reveal" action="app.html" method="get">
+        <label for="final-input" class="visually-hidden">What needs doing?</label>
+        <input id="final-input" name="t" type="text" autocomplete="off" placeholder="Find a plumber who can come tomorrow morning" maxlength="120">
+        <button type="submit" class="final-submit" aria-label="Hand it off">
+          <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M4 10h11M11 5.5 15.5 10 11 14.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </form>
+      <p class="final-hint reveal">Press <kbd>Enter</kbd> to watch it start in the demo.</p>
+    </section>
+  </main>
+
+  <footer id="site-footer" class="site-footer">
+    <a href="#top" class="wordmark" aria-label="Back to top">done<i></i></a>
+    <p>Made for neatHack · October 2026</p>
+    <p class="footer-quiet">Nothing here needs your attention<span aria-hidden="true">.</span></p>
+  </footer>
+
+  <script src="js/landing.js"></script>
+</body>
+</html>

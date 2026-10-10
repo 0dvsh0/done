@@ -1,0 +1,252 @@
+@import 'tailwindcss';
+
+/* ==========================================================================
+   Done. — one idea runs through everything: the period.
+
+   A sentence is finished when it gets its period. So is a task.
+   Surfaces are never pure black (that makes white text vibrate); text is
+   always one white at a different opacity; and colour only ever means one
+   thing — amber is "needs you", coral is "something broke", sage is
+   "reversible".
+   ========================================================================== */
+
+@theme {
+  /* Surfaces */
+  --color-ink-0: #09090a;
+  --color-ink-1: #0e0e10;
+  --color-ink-2: #141416;
+  --color-ink-3: #1b1b1e;
+  --color-line: rgb(255 255 255 / 0.07);
+  --color-line-2: rgb(255 255 255 / 0.12);
+  --color-line-3: rgb(255 255 255 / 0.2);
+
+  /* One white, many opacities */
+  --color-fg: #ededee;
+  --color-fg-2: rgb(237 237 238 / 0.62);
+  --color-fg-3: rgb(237 237 238 / 0.4);
+  --color-fg-4: rgb(237 237 238 / 0.22);
+  --color-fg-5: rgb(237 237 238 / 0.12);
+
+  /* The only colours allowed. Each means exactly one thing. */
+  --color-needs: #e9b866;
+  --color-snag: #e58a74;
+  --color-calm: #9fb7a6;
+
+  --font-ui: 'Geist Variable', 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-voice: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  --animate-breathe: breathe 3.6s var(--ease-in-out) infinite;
+  --animate-breathe-fast: breathe 1.6s var(--ease-in-out) infinite;
+  --animate-beckon: beckon 2.4s var(--ease-in-out) infinite;
+  --animate-rise: rise 0.42s var(--ease-out) both;
+  --animate-fade: fade 0.24s var(--ease-out) both;
+  --animate-swap: swap 0.34s var(--ease-out) both;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: scale(0.76);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes beckon {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.72;
+  }
+  50% {
+    transform: scale(1.22);
+    opacity: 1;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes swap {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ========================================================================== */
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-ink-0);
+    color: var(--color-fg);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.55;
+    letter-spacing: -0.006em;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    cursor: default;
+    user-select: none;
+  }
+
+  ::selection {
+    background: rgb(255 255 255 / 0.9);
+    color: var(--color-ink-0);
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    outline: none;
+  }
+
+  input,
+  textarea {
+    user-select: text;
+  }
+
+  button {
+    cursor: default;
+  }
+
+  :focus-visible {
+    outline: 1px solid rgb(255 255 255 / 0.38);
+    outline-offset: 2px;
+    border-radius: 5px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.08);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(255 255 255 / 0.16);
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* ==========================================================================
+   Window chrome
+   ========================================================================== */
+
+.drag {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* ==========================================================================
+   Utilities used across the app
+   ========================================================================== */
+
+@utility voice {
+  font-family: var(--font-voice);
+  letter-spacing: -0.005em;
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A sentence that changes crossfades rather than snapping. */
+.crossfade {
+  animation: swap 0.34s var(--ease-out);
+}
+
+@utility hairline-t {
+  box-shadow: inset 0 1px 0 0 var(--color-line);
+}
+
+@utility hairline-b {
+  box-shadow: inset 0 -1px 0 0 var(--color-line);
+}
+
+/* The period that closes when a task is finished. */
+.close-ring {
+  animation: close-ring 1.1s var(--ease-out);
+}
+
+@keyframes close-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(255 255 255 / 0.28);
+    transform: scale(1);
+  }
+  55% {
+    box-shadow: 0 0 0 7px rgb(255 255 255 / 0);
+    transform: scale(1.06);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(255 255 255 / 0);
+    transform: scale(1);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Respect people who don't want motion. Nothing here is information —
+   it's decoration, and it goes.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
