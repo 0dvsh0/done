@@ -25,9 +25,10 @@ export function TitleBar({ state }: { state: AppState }): React.JSX.Element {
   return (
     <header
       className={cx(
-        'drag relative z-30 flex h-11 shrink-0 items-center border-b border-line bg-ink-0/85',
-        'backdrop-blur-xl'
+        'drag relative z-30 flex h-11 shrink-0 items-center border-b border-line bg-ink-0'
       )}
+      // Double-clicking the bar maximises, the way a native window does.
+      onDoubleClick={() => void window.done.windowAction('maximize')}
     >
       {/* wordmark */}
       <div className={cx('flex items-center', isMac ? 'pl-[78px]' : 'pl-4')}>

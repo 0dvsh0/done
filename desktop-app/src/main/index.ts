@@ -65,11 +65,6 @@ function createWindow(): BrowserWindow {
     y: bounds.y,
     minWidth: 940,
     minHeight: 620,
-    // This is a focused app. One list, one detail pane, one decision at a
-    // time — a 27-inch canvas full of empty space helps nobody, so the
-    // window is allowed to be generous but never vaster than the work.
-    maxWidth: 1400,
-    maxHeight: 1000,
     show: false,
     frame: false,
     backgroundColor: '#09090a',
@@ -262,7 +257,14 @@ function buildMenu(getWindow: () => BrowserWindow | null): void {
         { role: 'zoomIn' },
         { role: 'zoomOut' },
         { type: 'separator' },
-        { role: 'togglefullscreen' },
+        {
+          label: 'Full Screen',
+          accelerator: 'F11',
+          click: () => {
+            const w = getWindow()
+            if (w) w.setFullScreen(!w.isFullScreen())
+          }
+        },
         ...(is.dev ? ([{ role: 'toggleDevTools' }] as Electron.MenuItemConstructorOptions[]) : [])
       ]
     },
@@ -414,13 +416,17 @@ function registerIpc(): void {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
   })
 
-  ipcMain.handle('window:action', (_e, action: 'minimize' | 'maximize' | 'close') => {
-    if (!windowRef) return
-    if (action === 'minimize') windowRef.minimize()
-    else if (action === 'maximize')
-      windowRef.isMaximized() ? windowRef.unmaximize() : windowRef.maximize()
-    else windowRef.close()
-  })
+  ipcMain.handle(
+    'window:action',
+    (_e, action: 'minimize' | 'maximize' | 'close' | 'fullscreen') => {
+      if (!windowRef) return
+      if (action === 'minimize') windowRef.minimize()
+      else if (action === 'maximize')
+        windowRef.isMaximized() ? windowRef.unmaximize() : windowRef.maximize()
+      else if (action === 'fullscreen') windowRef.setFullScreen(!windowRef.isFullScreen())
+      else windowRef.close()
+    }
+  )
 
   ipcMain.handle('window:is-maximized', () => Boolean(windowRef?.isMaximized()))
 }

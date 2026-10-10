@@ -42,13 +42,15 @@ export default function App(): React.JSX.Element {
               <TaskList state={state} />
             </main>
 
-            <AnimatePresence mode="popLayout" initial={false}>
+            {/* No `mode="popLayout"` and no `key` on purpose. `popLayout`
+                pops the exiting pane out of flow, which re-measures the list
+                beside it and slides every row; keying by task id remounts
+                the whole pane on each click for the same reason. The pane
+                animates only as it opens and closes — switching tasks
+                animates the content inside it instead. */}
+            <AnimatePresence initial={false}>
               {openId && state.tasks.find((t) => t.id === openId) && (
-                <Detail
-                  key={openId}
-                  task={state.tasks.find((t) => t.id === openId)!}
-                  state={state}
-                />
+                <Detail task={state.tasks.find((t) => t.id === openId)!} state={state} />
               )}
             </AnimatePresence>
           </div>

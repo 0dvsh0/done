@@ -217,7 +217,7 @@ export interface DoneApi {
   checkpoint(taskId: string): Promise<{ ok: boolean; id: string | null; message: string }>
   revealData(): Promise<void>
   openExternal(url: string): Promise<void>
-  windowAction(action: 'minimize' | 'maximize' | 'close'): Promise<void>
+  windowAction(action: 'minimize' | 'maximize' | 'close' | 'fullscreen'): Promise<void>
 }
 
 /* ---------------------------------------------------------------- commands */

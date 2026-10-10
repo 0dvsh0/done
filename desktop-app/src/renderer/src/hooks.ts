@@ -30,6 +30,13 @@ export function useHotkeys(state: AppState | null): void {
       const overlay = Boolean(sheet) || palette
       const mod = e.metaKey || e.ctrlKey
 
+      // Full screen, the way every other app offers it.
+      if (e.key === 'F11' || (mod && e.shiftKey && e.key.toLowerCase() === 'f')) {
+        e.preventDefault()
+        void window.done.windowAction('fullscreen')
+        return
+      }
+
       if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         togglePalette()

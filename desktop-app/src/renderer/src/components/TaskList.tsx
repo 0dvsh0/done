@@ -62,7 +62,7 @@ export function Composer({ limits }: { limits: Limits }): React.JSX.Element {
         submit()
       }}
       className={cx(
-        'mx-auto w-full max-w-[620px] px-8 pt-1 pb-5',
+        'column pt-1 pb-5',
         'rounded-[13px] border bg-ink-1/60 transition-colors duration-200',
         typing ? 'border-line-2 bg-ink-1' : 'border-line hover:border-line-2'
       )}
@@ -188,7 +188,7 @@ export function TaskList({ state }: { state: AppState }): React.JSX.Element {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-8">
-      <div className="mx-auto w-full max-w-[620px] pb-10">
+      <div className="mx-auto w-full max-w-[47.5rem] pb-10">
         {empty && <EmptyState />}
 
         {groups.needs.length > 0 && (
@@ -330,10 +330,8 @@ function Row({ task, open }: { task: Task; open: boolean }): React.JSX.Element {
   const showHot = task.state === 'working' || task.state === 'snag' || task.state === 'waiting'
 
   return (
-    <motion.div
-      layout="position"
+    <div
       data-row={task.id}
-      transition={{ type: 'spring', stiffness: 520, damping: 46, mass: 0.7 }}
       className={cx(
         'group relative -mx-2 flex cursor-default items-start gap-3 rounded-[10px] px-2 py-[9px]',
         'transition-colors duration-150',
@@ -370,9 +368,12 @@ function Row({ task, open }: { task: Task; open: boolean }): React.JSX.Element {
             {side && (
               <span
                 className={cx(
-                  'num text-[11px] whitespace-nowrap transition-opacity',
+                  'num text-[11px] whitespace-nowrap transition-opacity duration-150',
                   task.state === 'needs' ? 'text-needs' : 'text-fg-5',
-                  'group-hover:opacity-0'
+                  // Only step aside for the hover controls that replace it.
+                  // "Answer" is the call to action — it must never vanish
+                  // because the pointer happened to land on the row.
+                  showHot && task.state !== 'needs' && 'group-hover:opacity-0'
                 )}
               >
                 {side}
@@ -384,7 +385,7 @@ function Row({ task, open }: { task: Task; open: boolean }): React.JSX.Element {
 
         <TaskLine task={task} />
       </div>
-    </motion.div>
+    </div>
   )
 }
 

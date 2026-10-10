@@ -25,10 +25,18 @@ export function Detail({ task, state }: { task: Task; state: AppState }): React.
   const showTrace = useUI((s) => s.showTrace)
   const [steering, setSteering] = useState(false)
   const [steerText, setSteerText] = useState('')
+  const [steeredFor, setSteeredFor] = useState<string | null>(null)
   const steerRef = useRef<HTMLInputElement>(null)
 
-  // `Detail` is keyed by task id in App, so switching tasks remounts it and
-  // the steering field starts closed without an effect to reset it.
+  // The pane stays mounted as you move between tasks, so the steering field
+  // resets by comparing ids during render rather than in an effect. (React's
+  // documented "adjusting state when a prop changes" pattern.)
+  if (steeredFor !== null && steeredFor !== task.id) {
+    setSteeredFor(null)
+    setSteering(false)
+    setSteerText('')
+  }
+
   useEffect(() => {
     if (steering) steerRef.current?.focus()
   }, [steering])
@@ -50,11 +58,11 @@ export function Detail({ task, state }: { task: Task; state: AppState }): React.
 
   return (
     <motion.aside
-      initial={{ x: 28, opacity: 0 }}
+      initial={{ x: 24, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
-      exit={{ x: 24, opacity: 0 }}
-      transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
-      className="flex h-full w-[452px] shrink-0 flex-col border-l border-line bg-ink-1/35"
+      exit={{ x: 18, opacity: 0 }}
+      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+      className="flex h-full w-[452px] shrink-0 flex-col border-l border-line bg-ink-0"
       aria-label={`${task.title} — details`}
     >
       {/* header */}
@@ -117,7 +125,10 @@ export function Detail({ task, state }: { task: Task; state: AppState }): React.
                 label="Steer"
                 kbd="S"
                 dataSteer
-                onClick={() => setSteering((v) => !v)}
+                onClick={() => {
+                  setSteeredFor(task.id)
+                  setSteering((v) => !v)
+                }}
                 on={steering}
                 disabled={task.state === 'you'}
               />
@@ -153,6 +164,7 @@ export function Detail({ task, state }: { task: Task; state: AppState }): React.
                     if (!v) return
                     void api.steer(task.id, v)
                     setSteerText('')
+                    setSteeredFor(null)
                     setSteering(false)
                     toast('Told it. It’ll hold that from here.')
                   }}
@@ -164,7 +176,11 @@ export function Detail({ task, state }: { task: Task; state: AppState }): React.
                       maxLength={120}
                       placeholder="Say what to change — “cheaper”, “not Fridays”…"
                       onChange={(e) => setSteerText(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Escape' && setSteering(false)}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Escape') return
+                        setSteeredFor(null)
+                        setSteering(false)
+                      }}
                       className="min-w-0 flex-1 bg-transparent text-[13px] placeholder:text-fg-5"
                     />
                     <button

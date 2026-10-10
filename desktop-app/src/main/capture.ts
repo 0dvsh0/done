@@ -149,6 +149,12 @@ export async function captureSequence(getWindow: () => BrowserWindow | null): Pr
     await wait(1400)
     await shot('10-checkpointed')
     await key('Escape')
+    await wait(600)
+
+    // Maximised, the way the window behaves on a real display.
+    await js(`window.done.windowAction('maximize')`, 'maximize')
+    await wait(1200)
+    await shot('11-maximised')
 
     step('done')
   } catch (err) {

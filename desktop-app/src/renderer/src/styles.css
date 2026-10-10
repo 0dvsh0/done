@@ -161,6 +161,14 @@
     border-radius: 5px;
   }
 
+  /* Text fields carry their own focus state — the caret and the border of
+     whatever contains them. A ring on top of that is noise. */
+  input:focus-visible,
+  textarea:focus-visible,
+  [data-composer]:focus-visible {
+    outline: none;
+  }
+
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
@@ -203,6 +211,18 @@
 
 @utility num {
   font-variant-numeric: tabular-nums;
+}
+
+/**
+ * The reading column. Grows a little on a big display so the list never
+ * looks marooned in the middle of a maximised window, but stops well short
+ * of stretching a to-do item into a paragraph.
+ */
+@utility column {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: 2rem;
+  max-width: clamp(37.5rem, 42vw, 47.5rem);
 }
 
 /* A sentence that changes crossfades rather than snapping. */

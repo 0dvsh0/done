@@ -12,7 +12,7 @@ export function StatusBar({ state }: { state: AppState }): React.JSX.Element {
   const { ledger, integrations } = state
 
   return (
-    <footer className="flex h-[26px] shrink-0 items-center gap-3 border-t border-line bg-ink-0/80 px-4 text-[11px] text-fg-4 select-none">
+    <footer className="flex h-[26px] shrink-0 items-center gap-3 border-t border-line bg-ink-0 px-4 text-[11px] text-fg-4 select-none">
       <span className="num">
         {ledger.spent > 0
           ? `Spent ${money(ledger.spent)} today, all approved by you`
@@ -127,7 +127,7 @@ export function DayHeader({ state }: { state: AppState }): React.JSX.Element {
   const date = today.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
 
   return (
-    <div className="mx-auto w-full max-w-[620px] px-8 pt-7 pb-4">
+    <div className="column pt-7 pb-4">
       <h1 className="voice flex items-baseline gap-3 text-[27px] leading-none text-fg">
         {dayName}
         <span className="num text-[12px] font-normal text-fg-5">{date}</span>
