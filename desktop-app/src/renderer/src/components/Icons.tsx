@@ -4,7 +4,13 @@ import { cx } from '../lib/format'
  * Hand-drawn on a 20×20 grid at 1.4 stroke. Drawn here rather than pulled
  * from a pack so the weights match the hairlines everywhere else.
  */
-const S = ({ children, className }: { children: React.ReactNode; className?: string }): React.JSX.Element => (
+const S = ({
+  children,
+  className
+}: {
+  children: React.ReactNode
+  className?: string
+}): React.JSX.Element => (
   <svg
     viewBox="0 0 20 20"
     width="18"
@@ -135,6 +141,13 @@ export const Plus = (p: { className?: string }): React.JSX.Element => (
   </S>
 )
 
+export const Padlock = (p: { className?: string }): React.JSX.Element => (
+  <S className={p.className}>
+    <rect x="4.9" y="8.7" width="10.2" height="7.1" rx="1.8" />
+    <path d="M7.4 8.7V6.9a2.6 2.6 0 0 1 5.2 0v1.8" />
+  </S>
+)
+
 export const Minus = (p: { className?: string }): React.JSX.Element => (
   <S className={p.className}>
     <path d="M5.4 10h9.2" />
@@ -150,7 +163,10 @@ export const Square = (p: { className?: string }): React.JSX.Element => (
 export const Overlap = (p: { className?: string }): React.JSX.Element => (
   <S className={p.className}>
     <rect x="3.6" y="7.4" width="9" height="9" rx="1.6" />
-    <path d="M7.6 7.4V6a1.6 1.6 0 0 1 1.6-1.6h5.2A1.6 1.6 0 0 1 16 6v5.2a1.6 1.6 0 0 1-1.6 1.6h-1.4" opacity="0.55" />
+    <path
+      d="M7.6 7.4V6a1.6 1.6 0 0 1 1.6-1.6h5.2A1.6 1.6 0 0 1 16 6v5.2a1.6 1.6 0 0 1-1.6 1.6h-1.4"
+      opacity="0.55"
+    />
   </S>
 )
 

@@ -38,6 +38,7 @@
     "eslint": "^9.39.1",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.26",
     "motion": "^12.23.12",
     "prettier": "^3.7.4",
     "react": "^19.2.1",

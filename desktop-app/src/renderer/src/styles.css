@@ -32,7 +32,8 @@
   --color-snag: #e58a74;
   --color-calm: #9fb7a6;
 
-  --font-ui: 'Geist Variable', 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-ui:
+    'Geist Variable', 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-voice: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
   --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
 

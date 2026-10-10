@@ -1,4 +1,4 @@
-import type { Economics, Ledger, SpanRecord } from '../shared/types'
+import type { Economics, SpanRecord } from '../shared/types'
 
 /**
  * The pricing model, planned in cfo.ai and computed here from real usage.
@@ -60,7 +60,7 @@ function scenario(name: string, periods: number, costPer: number): Economics['sc
 
 const round = (n: number): number => Math.round(n * 100) / 100
 
-export function economics(spans: Record<string, SpanRecord[]>, _ledger: Ledger): Economics {
+export function economics(spans: Record<string, SpanRecord[]>): Economics {
   const costPer = measuredCostPerPeriod(spans)
   const periods = 100
   const monthlyRevenue = periods * PRICE_PER_PERIOD

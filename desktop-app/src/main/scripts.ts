@@ -53,12 +53,12 @@ export interface Script {
   beats: Beat[]
 }
 
-const S = (
-  key: string,
-  title: string,
-  plan: string[],
-  beats: Beat[]
-): Script => ({ key, title, plan, beats })
+const S = (key: string, title: string, plan: string[], beats: Beat[]): Script => ({
+  key,
+  title,
+  plan,
+  beats
+})
 
 /* ------------------------------------------------------------------------ */
 
@@ -321,12 +321,7 @@ const gym = S(
 const refund = S(
   'refund',
   'Get a refund for the cracked phone case',
-  [
-    'Find the order',
-    'Check the return rules',
-    'Start the return',
-    'Confirm the refund amount'
-  ],
+  ['Find the order', 'Check the return rules', 'Start the return', 'Confirm the refund amount'],
   [
     {
       plan: 0,

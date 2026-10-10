@@ -44,7 +44,9 @@ function LimitsSheet({
           onChange={(v) => {
             void api.limits({ spend: v })
             toast(
-              v > 0 ? `It can now spend up to ${money(v)} on its own.` : 'It will ask about every cent.',
+              v > 0
+                ? `It can now spend up to ${money(v)} on its own.`
+                : 'It will ask about every cent.',
               true
             )
           }}
@@ -72,7 +74,13 @@ function LimitsSheet({
         title="Never do anything that can’t be undone"
         hint="Cancelling, deleting, signing. Always asks. This one stays on."
       >
-        <Switch checked locked label="Never do anything that can’t be undone" />
+        <span className="flex items-center gap-2.5">
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-fg-5">
+            <I.Padlock className="[&_svg]:h-[12px] [&_svg]:w-[12px]" />
+            Always
+          </span>
+          <Switch checked locked label="Never do anything that can’t be undone" />
+        </span>
       </Field>
 
       <Field title="Quiet hours" hint="Hold questions between 10pm and 8am.">
@@ -84,8 +92,8 @@ function LimitsSheet({
       </Field>
 
       <p className="pt-4 text-[11.5px] leading-relaxed text-fg-5">
-        Every step is traced end to end, so you can always see exactly what happened and why — including
-        the things it did without asking.
+        Every step is traced end to end, so you can always see exactly what happened and why —
+        including the things it did without asking.
       </p>
     </Sheet>
   )
@@ -106,7 +114,13 @@ const KEYS: [string, string[]][] = [
   ['Close', ['Esc']]
 ]
 
-function ShortcutsSheet({ open, onClose }: { open: boolean; onClose: () => void }): React.JSX.Element {
+function ShortcutsSheet({
+  open,
+  onClose
+}: {
+  open: boolean
+  onClose: () => void
+}): React.JSX.Element {
   return (
     <Sheet open={open} onClose={onClose} title="Shortcuts" width={460}>
       <dl>
@@ -173,13 +187,17 @@ function BusinessSheet({
               value={tiny(econ.costPerPeriod)}
               hint={measured ? 'measured' : 'assumed'}
             />
-            <Cell label="Gross margin" value={`${econ.marginPct}%`} tone={econ.marginPct > 60 ? 'good' : undefined} />
+            <Cell
+              label="Gross margin"
+              value={`${econ.marginPct}%`}
+              tone={econ.marginPct > 60 ? 'good' : undefined}
+            />
           </div>
 
           <p className="mt-3 text-[12px] leading-relaxed text-fg-4">
-            The cost figure is every span in a finished run — planning, retries, the calls that failed and
-            the verification pass. Failed work is ours, not yours, which is the only way this price can
-            stay honest.
+            The cost figure is every span in a finished run — planning, retries, the calls that
+            failed and the verification pass. Failed work is ours, not yours, which is the only way
+            this price can stay honest.
           </p>
 
           <h3 className="mt-5 mb-2 text-[10.5px] font-medium tracking-[0.09em] text-fg-4 uppercase">
@@ -329,9 +347,9 @@ function ConnectionsSheet({
           </span>
         </div>
         <p className="mt-2 text-[12.5px] leading-relaxed text-fg-3">
-          A change to how the agent behaves — its limits, the plan it chose after you steered it — is
-          written down and committed, so Entire turns it into a checkpoint linked to the session that
-          caused it.
+          A change to how the agent behaves — its limits, the plan it chose after you steered it —
+          is written down and committed, so Entire turns it into a checkpoint linked to the session
+          that caused it.
         </p>
 
         <dl className="num mt-3 space-y-1 text-[12px]">

@@ -282,7 +282,9 @@ export const entire = {
 
     const version = (v.stdout.split('\n')[0] || '').trim() || 'installed'
     const enabled = existsSync(join(repoPath, '.entire'))
-    const list = enabled ? await this.listCheckpoints() : { checkpoints: 0, lastId: null, lastAt: null }
+    const list = enabled
+      ? await this.listCheckpoints()
+      : { checkpoints: 0, lastId: null, lastAt: null }
 
     return {
       installed: true,
@@ -296,7 +298,11 @@ export const entire = {
     }
   },
 
-  async listCheckpoints(): Promise<{ checkpoints: number; lastId: string | null; lastAt: number | null }> {
+  async listCheckpoints(): Promise<{
+    checkpoints: number
+    lastId: string | null
+    lastAt: number | null
+  }> {
     if (!this.repoRoot) return { checkpoints: 0, lastId: null, lastAt: null }
     const r = await run('entire', ['checkpoint', 'list', '--json', '--no-pager'], this.repoRoot)
     if (r.code !== 0) return { checkpoints: 0, lastId: null, lastAt: null }
@@ -339,7 +345,12 @@ export const entire = {
     const rel = join('.done', 'behaviour', `${stamp}.json`)
     const abs = join(this.repoRoot, rel)
     const body = JSON.stringify(
-      { title: req.title, summary: req.summary, at: new Date().toISOString(), behaviour: req.behaviour },
+      {
+        title: req.title,
+        summary: req.summary,
+        at: new Date().toISOString(),
+        behaviour: req.behaviour
+      },
       null,
       2
     )
@@ -355,7 +366,15 @@ export const entire = {
     await run('git', ['add', '--', rel], this.repoRoot)
     const commit = await run(
       'git',
-      ['-c', 'user.name=done', '-c', 'user.email=done@localhost', 'commit', '-m', `behaviour: ${req.title}`],
+      [
+        '-c',
+        'user.name=done',
+        '-c',
+        'user.email=done@localhost',
+        'commit',
+        '-m',
+        `behaviour: ${req.title}`
+      ],
       this.repoRoot
     )
     if (commit.code !== 0) {
@@ -386,6 +405,10 @@ export const entire = {
           'git initialised, but Entire could not be enabled. Install the CLI: iex "& {$(irm https://entire.io/install.ps1)} | iex"'
       }
     }
-    return { ok: true, id: null, message: 'Entire enabled. Behaviour changes are checkpointed from now on.' }
+    return {
+      ok: true,
+      id: null,
+      message: 'Entire enabled. Behaviour changes are checkpointed from now on.'
+    }
   }
 }

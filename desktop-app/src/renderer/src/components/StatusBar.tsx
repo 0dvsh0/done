@@ -23,7 +23,13 @@ export function StatusBar({ state }: { state: AppState }): React.JSX.Element {
 
       <div className="ml-auto flex items-center gap-3">
         <Chip
-          tone={integrations.neatlogs.connected ? 'on' : integrations.neatlogs.installed ? 'idle' : 'off'}
+          tone={
+            integrations.neatlogs.connected
+              ? 'on'
+              : integrations.neatlogs.installed
+                ? 'idle'
+                : 'off'
+          }
           onClick={() => showSheet('connections')}
           label={
             integrations.neatlogs.connected
@@ -47,7 +53,9 @@ export function StatusBar({ state }: { state: AppState }): React.JSX.Element {
           }
         />
         <span className="num text-fg-5">
-          {integrations.neatlogs.lastExportAt ? `traced ${ago(integrations.neatlogs.lastExportAt)}` : ''}
+          {integrations.neatlogs.lastExportAt
+            ? `traced ${ago(integrations.neatlogs.lastExportAt)}`
+            : ''}
         </span>
       </div>
     </footer>
@@ -91,7 +99,19 @@ export function DayHeader({ state }: { state: AppState }): React.JSX.Element {
     const going = state.tasks.filter(
       (t) => t.state === 'working' || t.state === 'snag' || t.state === 'waiting'
     ).length
-    const words = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten']
+    const words = [
+      'No',
+      'One',
+      'Two',
+      'Three',
+      'Four',
+      'Five',
+      'Six',
+      'Seven',
+      'Eight',
+      'Nine',
+      'Ten'
+    ]
     if (state.allPaused) return 'Everything’s paused. Nothing will move until you say.'
     if (!needs && !going) return 'Everything’s done. Nothing needs you.'
     const parts: string[] = []

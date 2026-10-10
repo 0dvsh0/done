@@ -43,7 +43,8 @@ export function Composer({ limits }: { limits: Limits }): React.JSX.Element {
     const when = EXTRAS.when[idx.when]
     const budget = EXTRAS.budget[idx.budget]
     void api.create(text, {
-      when: when === 'whenever' ? null : when === 'today' ? 'Today' : `By ${when.replace(/^by /, '')}`,
+      when:
+        when === 'whenever' ? null : when === 'today' ? 'Today' : `By ${when.replace(/^by /, '')}`,
       budget: budget === 'no spending' ? null : `Up to ${budget}`
     })
     setValue('')
@@ -321,11 +322,12 @@ function Row({ task, open }: { task: Task; open: boolean }): React.JSX.Element {
           : task.state === 'waiting'
             ? (task.when ?? 'Soon')
             : task.state === 'done' || task.state === 'stopped'
-              ? clock(task.finishedAt ?? Date.now())
+              ? task.finishedAt
+                ? clock(task.finishedAt)
+                : ''
               : ''
 
-  const showHot =
-    task.state === 'working' || task.state === 'snag' || task.state === 'waiting'
+  const showHot = task.state === 'working' || task.state === 'snag' || task.state === 'waiting'
 
   return (
     <motion.div

@@ -27,7 +27,7 @@ export const money = (n: number): string =>
   n === 0 ? '$0' : `$${(Math.round(n * 100) / 100).toFixed(n < 10 && n % 1 ? 2 : 0)}`
 
 export const tiny = (n: number): string =>
-  n === 0 ? '$0' : n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`
+  n === 0 ? '$0' : n < 0.1 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`
 
 export function minutes(n: number): string {
   if (n < 60) return `${n} minute${n === 1 ? '' : 's'}`

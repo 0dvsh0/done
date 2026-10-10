@@ -21,12 +21,12 @@ npm run pack:win     # unpacked build in release/
 
 ### Environment
 
-| Variable | What it does |
-|---|---|
+| Variable           | What it does                                                                                                                                              |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `NEATLOGS_API_KEY` | Turns on trace export to [neatlogs](https://neatlogs.com). Without it spans are still recorded locally and shown in the app; they simply aren't uploaded. |
-| `DONE_FRESH=1` | Starts a clean seeded morning instead of restoring your saved list. |
-| `DONE_CADENCE=1.6` | Speeds up the demo pacing (`0.5` is frantic, `2` is very slow). |
-| `DONE_SHOT=1` | Walks the app through its states and writes screenshots to `docs/shots`. |
+| `DONE_FRESH=1`     | Starts a clean seeded morning instead of restoring your saved list.                                                                                       |
+| `DONE_CADENCE=1.6` | Speeds up the demo pacing (`0.5` is frantic, `2` is very slow).                                                                                           |
+| `DONE_SHOT=1`      | Walks the app through its states and writes screenshots to `docs/shots`.                                                                                  |
 
 Your list is saved to `app.getPath('userData')/state.json` and restored on launch.
 **Settings → Connections → Show my data on disk** opens it.
@@ -41,17 +41,17 @@ One shape carries every state. A task starts as an open circle; a ring fills as 
 happens; when it's finished the circle closes into a period — which is also the
 wordmark in the title bar.
 
-| State | Dot | Meaning |
-|---|---|---|
-| Waiting | thin outline | Written down. Starts soon, or when you said. |
-| On it | ring fills + slow pulse | Working. The ring is how far along. |
-| Needs you | amber, beckoning | **The only attention colour.** Kept rare on purpose. |
-| Hit a snag | coral | Something failed. It is already trying another way. |
-| Paused / With you | flat grey | You stopped it, or took it over. |
-| Done. | solid period | Finished, with a receipt you can check. |
+| State             | Dot                     | Meaning                                              |
+| ----------------- | ----------------------- | ---------------------------------------------------- |
+| Waiting           | thin outline            | Written down. Starts soon, or when you said.         |
+| On it             | ring fills + slow pulse | Working. The ring is how far along.                  |
+| Needs you         | amber, beckoning        | **The only attention colour.** Kept rare on purpose. |
+| Hit a snag        | coral                   | Something failed. It is already trying another way.  |
+| Paused / With you | flat grey               | You stopped it, or took it over.                     |
+| Done.             | solid period            | Finished, with a receipt you can check.              |
 
-Colour never decorates. Amber means *needs you*, coral means *snag*, sage means
-*reversible*. Everything else is one white at a different opacity on `#09090a`.
+Colour never decorates. Amber means _needs you_, coral means _snag_, sage means
+_reversible_. Everything else is one white at a different opacity on `#09090a`.
 
 Motion is only ever a status: the breathing pulse, the crossfaded sentence, the ring
 that closes. Everything respects `prefers-reduced-motion`.
@@ -84,7 +84,7 @@ simultaneously:
 - the sentence the agent says out loud.
 
 There is no second description of a step. `name`, `input` and `output` become both
-the machine line under *Show what's underneath* and the raw material for the plain
+the machine line under _Show what's underneath_ and the raw material for the plain
 sentence. If the trace is wrong, the sentence is wrong — which is the point.
 
 Each run is a real `trace()` rooted in a `WORKFLOW` span, with `TOOL` / `LLM` /
@@ -136,7 +136,7 @@ npx neatlogs doctor --local --json     # verified: status "pass", SDK 1.1.28, sc
 
 Set `NEATLOGS_API_KEY` and the same spans are exported to your dashboard under the
 `done-desktop` workflow. The app never claims an export it didn't make — the status
-chip in the bottom bar says *exported* or *local only* based on what actually
+chip in the bottom bar says _exported_ or _local only_ based on what actually
 happened.
 
 ### Entire
@@ -157,7 +157,7 @@ and offers the install command instead of pretending.
 ### cfo.ai
 
 **Pay per period. Not for effort.** If it didn't get done, it isn't billed — which
-only works if the cost of a *finished* task is known. So the app measures it from the
+only works if the cost of a _finished_ task is known. So the app measures it from the
 traces: every span in a completed run, including the calls that failed and the
 verification pass. Failed work is ours, not yours.
 

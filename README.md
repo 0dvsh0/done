@@ -4,6 +4,18 @@
 
 Built for **#neatHack** (neatlogs AI agent hackathon, Oct 10–11 2026). The only track is *"Build an agent that works (literally)."*
 
+> **The desktop app is [`desktop-app/`](desktop-app).** Electron + React + TypeScript +
+> Tailwind, with the agent runtime, the policy engine and the tracing in the main
+> process. That is the current build; everything below describes the web demo it
+> grew out of and the design it inherited.
+> See [`hackathon.md`](hackathon.md) for the build log and evidence.
+
+```bash
+cd desktop-app
+npm install
+npm run dev
+```
+
 ---
 
 ## The design idea

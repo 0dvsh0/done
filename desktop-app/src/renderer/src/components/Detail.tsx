@@ -18,13 +18,7 @@ const STATE_WORD: Record<Task['state'], string> = {
   stopped: 'Stopped'
 }
 
-export function Detail({
-  task,
-  state
-}: {
-  task: Task
-  state: AppState
-}): React.JSX.Element {
+export function Detail({ task, state }: { task: Task; state: AppState }): React.JSX.Element {
   const closeTask = useUI((s) => s.closeTask)
   const under = useUI((s) => s.under)
   const toggleUnder = useUI((s) => s.toggleUnder)
@@ -33,7 +27,8 @@ export function Detail({
   const [steerText, setSteerText] = useState('')
   const steerRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => setSteering(false), [task.id])
+  // `Detail` is keyed by task id in App, so switching tasks remounts it and
+  // the steering field starts closed without an effect to reset it.
   useEffect(() => {
     if (steering) steerRef.current?.focus()
   }, [steering])
@@ -42,8 +37,8 @@ export function Detail({
   const finished = task.state === 'done' || task.state === 'stopped'
   const spans = state.spans[task.id] ?? []
 
-  const meta = finished
-    ? `Finished ${clock(task.finishedAt ?? Date.now())} · took ${Math.max(1, task.receipt?.tookMinutes ?? 1)} min`
+  const meta = task.finishedAt
+    ? `Finished ${clock(task.finishedAt)} · took ${Math.max(1, task.receipt?.tookMinutes ?? 1)} min`
     : [
         `Started ${clock(task.created)}`,
         `step ${Math.max(1, Math.min(task.plan.length, task.planIdx + 1))} of ${task.plan.length}`,
@@ -101,7 +96,9 @@ export function Detail({
         </div>
 
         <div className="px-6 pt-4">
-          <AnimatePresence>{task.ask && <AskCard key={task.ask.id} task={task} ask={task.ask} />}</AnimatePresence>
+          <AnimatePresence>
+            {task.ask && <AskCard key={task.ask.id} task={task} ask={task.ask} />}
+          </AnimatePresence>
         </div>
 
         {!finished && (
@@ -339,9 +336,7 @@ function Ctl({
       disabled={disabled}
       className={cx(
         'no-drag inline-flex h-[27px] items-center gap-1.5 rounded-[7px] px-2 text-[12px] transition-colors',
-        on
-          ? 'bg-white/[0.09] text-fg'
-          : 'text-fg-3 hover:bg-white/[0.05] hover:text-fg-2',
+        on ? 'bg-white/[0.09] text-fg' : 'text-fg-3 hover:bg-white/[0.05] hover:text-fg-2',
         'disabled:opacity-30',
         className
       )}
@@ -355,9 +350,7 @@ function Ctl({
 
 function BlockLabel({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
-    <h3 className="text-[10.5px] font-medium tracking-[0.09em] text-fg-4 uppercase">
-      {children}
-    </h3>
+    <h3 className="text-[10.5px] font-medium tracking-[0.09em] text-fg-4 uppercase">{children}</h3>
   )
 }
 
@@ -429,7 +422,11 @@ function AskCard({ task, ask }: { task: Task; ask: Ask }): React.JSX.Element {
           {ask.kind === 'approve' ? REASON[ask.category] : 'It needs a decision from you'}
         </span>
         <span className="num ml-auto text-[11.5px] text-needs/70">
-          {ask.kind === 'approve' && ask.cost ? money(ask.cost) : clock(task.story.at(-1)?.at ?? Date.now())}
+          {ask.kind === 'approve' && ask.cost
+            ? money(ask.cost)
+            : task.story.length
+              ? clock(task.story[task.story.length - 1].at)
+              : ''}
         </span>
       </div>
 
@@ -484,21 +481,17 @@ function AskCard({ task, ask }: { task: Task; ask: Ask }): React.JSX.Element {
           )
         )}
 
-        <div className="mt-4 flex items-center gap-2">
-          {ask.kind === 'approve' && (
+        {ask.kind === 'approve' && (
+          <div className="mt-4 flex items-center gap-2">
             <Button variant="solid" onClick={() => void api.answer(task.id, 'yes')}>
               {ask.yes}
             </Button>
-          )}
-          {ask.kind === 'approve' && (
             <Button variant="ghost" onClick={() => void api.answer(task.id, 'no')}>
               {ask.no}
             </Button>
-          )}
-          <span className="num ml-auto text-[11px] text-fg-5">
-            {ask.kind === 'approve' ? `⌘↵ to ${ask.yes.toLowerCase()}` : '↑ ↓ ↵'}
-          </span>
-        </div>
+            <span className="num ml-auto text-[11px] text-fg-5">⌘↵ to {ask.yes.toLowerCase()}</span>
+          </div>
+        )}
       </div>
     </motion.div>
   )

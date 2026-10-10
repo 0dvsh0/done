@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react'
 import type { AppState } from '../../../shared/types'
 import { cx } from '../lib/format'
-import { api, toast, useUI } from '../store'
+import { api, useUI } from '../store'
 import { IconButton } from './primitives'
 import { Kbd } from './Icons'
 import * as I from './Icons'
@@ -67,7 +67,11 @@ export function TitleBar({ state }: { state: AppState }): React.JSX.Element {
             allPaused ? 'text-needs' : 'text-fg-3 hover:text-fg-2'
           )}
         >
-          {allPaused ? <I.Play className="[&_svg]:h-[13px] [&_svg]:w-[13px]" /> : <I.Pause className="[&_svg]:h-[13px] [&_svg]:w-[13px]" />}
+          {allPaused ? (
+            <I.Play className="[&_svg]:h-[13px] [&_svg]:w-[13px]" />
+          ) : (
+            <I.Pause className="[&_svg]:h-[13px] [&_svg]:w-[13px]" />
+          )}
           <span className="num">{allPaused ? 'Resume all' : 'Pause all'}</span>
         </button>
       </div>
@@ -196,5 +200,3 @@ export function Toast(): React.JSX.Element {
     </AnimatePresence>
   )
 }
-
-export { toast }

@@ -68,7 +68,10 @@ export async function captureSequence(getWindow: () => BrowserWindow | null): Pr
 
   const key = (k: string, mod = false): Promise<unknown> =>
     js(
-      `window.dispatchEvent(new KeyboardEvent('keydown', {key:${JSON.stringify(k)}, metaKey:${mod}, bubbles:true}))`,
+      `(() => { const t = document.activeElement && document.activeElement !== document.body
+          ? document.activeElement : window;
+        t.dispatchEvent(new KeyboardEvent('keydown', {key:${JSON.stringify(k)}, metaKey:${mod}, bubbles:true}));
+        return true })()`,
       `key ${k}`
     )
 
@@ -80,6 +83,7 @@ export async function captureSequence(getWindow: () => BrowserWindow | null): Pr
     )
 
   try {
+    getWindow()?.focus()
     await wait(Number(process.env['DONE_SHOT_WAIT'] ?? 6000))
     await shot('01-list')
 
@@ -133,9 +137,18 @@ export async function captureSequence(getWindow: () => BrowserWindow | null): Pr
       'type economics'
     )
     await wait(700)
-    await key('Enter')
-    await wait(1000)
     await shot('09-economics')
+    await key('Escape')
+    await wait(700)
+
+    // Change a limit. That is a change to how the agent behaves, so it
+    // should leave a commit behind for Entire to turn into a checkpoint.
+    await key(',')
+    await wait(900)
+    await clickText('$25')
+    await wait(1400)
+    await shot('10-checkpointed')
+    await key('Escape')
 
     step('done')
   } catch (err) {

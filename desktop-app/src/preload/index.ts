@@ -28,7 +28,10 @@ const api: DoneApi = {
 const system = {
   ...electronAPI,
   platform: process.platform,
-  onMenu: (channel: 'menu:new' | 'menu:command' | 'menu:settings' | 'menu:trace', cb: () => void) => {
+  onMenu: (
+    channel: 'menu:new' | 'menu:command' | 'menu:settings' | 'menu:trace',
+    cb: () => void
+  ) => {
     const listener = (): void => cb()
     ipcRenderer.on(channel, listener)
     return () => ipcRenderer.removeListener(channel, listener)
@@ -55,8 +58,8 @@ if (process.contextIsolated) {
     console.error(err)
   }
 } else {
-  // @ts-ignore
-  window.done = api
-  // @ts-ignore
-  window.system = system
+  // contextIsolation is off — the renderer can hold the objects directly.
+  const w = window as unknown as { done: DoneApi; system: DoneSystem }
+  w.done = api
+  w.system = system
 }

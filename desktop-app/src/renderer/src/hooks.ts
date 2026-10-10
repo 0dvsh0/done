@@ -73,7 +73,9 @@ export function useHotkeys(state: AppState | null): void {
 
       if (typing || overlay) return
 
-      const order: Task[] = state ? ordered(state).needs.concat(ordered(state).going, doneOpen ? ordered(state).done : []) : []
+      const order: Task[] = state
+        ? ordered(state).needs.concat(ordered(state).going, doneOpen ? ordered(state).done : [])
+        : []
       const current = state?.tasks.find((t) => t.id === (openId ?? cursorId))
       const index = current ? order.findIndex((t) => t.id === current.id) : -1
 
@@ -91,9 +93,7 @@ export function useHotkeys(state: AppState | null): void {
           if (next) {
             setCursor(next.id)
             if (openId) openTask(next.id)
-            document
-              .querySelector(`[data-row="${next.id}"]`)
-              ?.scrollIntoView({ block: 'nearest' })
+            document.querySelector(`[data-row="${next.id}"]`)?.scrollIntoView({ block: 'nearest' })
           }
           break
         }
@@ -105,9 +105,7 @@ export function useHotkeys(state: AppState | null): void {
           if (prev) {
             setCursor(prev.id)
             if (openId) openTask(prev.id)
-            document
-              .querySelector(`[data-row="${prev.id}"]`)
-              ?.scrollIntoView({ block: 'nearest' })
+            document.querySelector(`[data-row="${prev.id}"]`)?.scrollIntoView({ block: 'nearest' })
           }
           break
         }

@@ -44,7 +44,11 @@ export default function App(): React.JSX.Element {
 
             <AnimatePresence mode="popLayout" initial={false}>
               {openId && state.tasks.find((t) => t.id === openId) && (
-                <Detail key={openId} task={state.tasks.find((t) => t.id === openId)!} state={state} />
+                <Detail
+                  key={openId}
+                  task={state.tasks.find((t) => t.id === openId)!}
+                  state={state}
+                />
               )}
             </AnimatePresence>
           </div>
@@ -76,7 +80,8 @@ function Booting(): React.JSX.Element {
   return (
     <div className="flex flex-1 items-center justify-center">
       <div className="flex items-baseline text-[15px] font-medium tracking-[-0.045em] text-fg-4">
-        done<span className="ml-[0.09em] inline-block h-[4.5px] w-[4.5px] animate-pulse rounded-full bg-fg-4" />
+        done
+        <span className="ml-[0.09em] inline-block h-[4.5px] w-[4.5px] animate-pulse rounded-full bg-fg-4" />
       </div>
     </div>
   )

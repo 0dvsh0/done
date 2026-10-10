@@ -97,7 +97,11 @@ export const groupOf = (s: AppState['tasks'][number]): 'needs' | 'going' | 'done
 }
 
 export function ordered(state: AppState): Record<'needs' | 'going' | 'done', AppState['tasks']> {
-  const buckets: Record<'needs' | 'going' | 'done', AppState['tasks']> = { needs: [], going: [], done: [] }
+  const buckets: Record<'needs' | 'going' | 'done', AppState['tasks']> = {
+    needs: [],
+    going: [],
+    done: []
+  }
   for (const t of state.tasks) buckets[groupOf(t)].push(t)
   buckets.done.sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))
   return buckets
@@ -108,7 +112,19 @@ export function summary(state: AppState): string {
   const live = going.filter((t) => t.state !== 'paused' && t.state !== 'you').length
   if (state.allPaused) return 'Everything’s paused. Nothing will move until you say.'
   if (!needs.length && !live) return 'Everything’s done. Nothing needs you.'
-  const words = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten']
+  const words = [
+    'No',
+    'One',
+    'Two',
+    'Three',
+    'Four',
+    'Five',
+    'Six',
+    'Seven',
+    'Eight',
+    'Nine',
+    'Ten'
+  ]
   const parts: string[] = []
   if (needs.length) {
     parts.push(

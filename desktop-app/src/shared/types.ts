@@ -7,14 +7,7 @@
 /* ------------------------------------------------------------------ the dot */
 
 export type TaskState =
-  | 'waiting'
-  | 'working'
-  | 'snag'
-  | 'needs'
-  | 'paused'
-  | 'you'
-  | 'done'
-  | 'stopped'
+  'waiting' | 'working' | 'snag' | 'needs' | 'paused' | 'you' | 'done' | 'stopped'
 
 export const STATE_WORDS: Record<TaskState, string> = {
   waiting: 'Waiting to start',
@@ -29,14 +22,7 @@ export const STATE_WORDS: Record<TaskState, string> = {
 
 /* ------------------------------------------------------------------ traces */
 
-export type SpanKind =
-  | 'WORKFLOW'
-  | 'AGENT'
-  | 'LLM'
-  | 'TOOL'
-  | 'RETRIEVER'
-  | 'GUARDRAIL'
-  | 'CHAIN'
+export type SpanKind = 'WORKFLOW' | 'AGENT' | 'LLM' | 'TOOL' | 'RETRIEVER' | 'GUARDRAIL' | 'CHAIN'
 
 export type SpanStatus = 'ok' | 'error' | 'recovered'
 
@@ -247,5 +233,12 @@ export interface Economics {
   monthlyGross: number
   fixedMonthly: number
   runwayMonths: number
-  scenarios: { name: string; customers: number; revenue: number; cost: number; gross: number; margin: number }[]
+  scenarios: {
+    name: string
+    customers: number
+    revenue: number
+    cost: number
+    gross: number
+    margin: number
+  }[]
 }

@@ -75,9 +75,7 @@ export function TraceSheet({
     >
       <div className="pb-4">
         <div className="mb-3 flex items-center gap-2 rounded-[9px] border border-line bg-ink-0/60 px-3 py-2">
-          <span className="text-[11px] text-fg-4">
-            workflow
-          </span>
+          <span className="text-[11px] text-fg-4">workflow</span>
           <span className="truncate font-mono text-[11.5px] text-fg-2">{task.title}</span>
           <span
             className={cx(
@@ -103,8 +101,9 @@ export function TraceSheet({
 
         {carried > 0 && (
           <p className="mt-3 border-t border-line pt-3 text-[11.5px] leading-relaxed text-fg-5">
-            {carried} earlier {carried === 1 ? 'step was' : 'steps were'} carried over from your last
-            session, so {carried === 1 ? 'it is' : 'they are'} in the story but not in this trace.
+            {carried} earlier {carried === 1 ? 'step was' : 'steps were'} carried over from your
+            last session, so {carried === 1 ? 'it is' : 'they are'} in the story but not in this
+            trace.
           </p>
         )}
       </div>
@@ -152,7 +151,9 @@ function SpanRow({ span, max }: { span: SpanRecord; max: number }): React.JSX.El
         <div className="mt-1 flex items-baseline gap-2 text-[11px]">
           <span className="truncate text-fg-3">{span.output}</span>
           {span.tokens && (
-            <span className="num shrink-0 text-fg-5">{span.tokens.input + span.tokens.output} tok</span>
+            <span className="num shrink-0 text-fg-5">
+              {span.tokens.input + span.tokens.output} tok
+            </span>
           )}
           {span.cost != null && <span className="num shrink-0 text-fg-5">{tiny(span.cost)}</span>}
         </div>

@@ -22,7 +22,9 @@ function ensureDir(): void {
 
 function readJson(file: string): Record<string, unknown> | null {
   try {
-    return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>) : null
+    return existsSync(file)
+      ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)
+      : null
   } catch {
     return null
   }
@@ -78,7 +80,11 @@ function createWindow(): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
-      spellcheck: false
+      spellcheck: false,
+      // The dot's pulse and the crossfaded sentences are rAF-driven. If the
+      // window isn't focused, Chromium throttles rAF and the motion stalls
+      // half-finished — which reads as a rendering bug, not a nicety.
+      backgroundThrottling: false
     }
   })
 
@@ -91,7 +97,13 @@ function createWindow(): BrowserWindow {
     const b = window.isMaximized() ? window.getNormalBounds() : window.getBounds()
     writeFileSync(
       windowFile,
-      JSON.stringify({ width: b.width, height: b.height, x: b.x, y: b.y, maximized: window.isMaximized() })
+      JSON.stringify({
+        width: b.width,
+        height: b.height,
+        x: b.x,
+        y: b.y,
+        maximized: window.isMaximized()
+      })
     )
   }
   window.on('resize', saveBounds)
@@ -132,7 +144,9 @@ let tray: Tray | null = null
 function trayImage(): Electron.NativeImage {
   // A period, on a transparent field. Same mark as the wordmark.
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.4" fill="#ededee"/></svg>`
-  return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`)
+  return nativeImage.createFromDataURL(
+    `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
+  )
 }
 
 function buildTray(getWindow: () => BrowserWindow | null): void {
@@ -192,7 +206,11 @@ function buildMenu(getWindow: () => BrowserWindow | null): void {
             submenu: [
               { role: 'about' },
               { type: 'separator' },
-              { label: 'Settings…', accelerator: 'Cmd+,', click: () => getWindow()?.webContents.send('menu:settings') },
+              {
+                label: 'Settings…',
+                accelerator: 'Cmd+,',
+                click: () => getWindow()?.webContents.send('menu:settings')
+              },
               { type: 'separator' },
               { role: 'hide' },
               { role: 'hideOthers' },
@@ -206,7 +224,11 @@ function buildMenu(getWindow: () => BrowserWindow | null): void {
     {
       label: 'File',
       submenu: [
-        { label: 'New task', accelerator: 'CmdOrCtrl+N', click: () => getWindow()?.webContents.send('menu:new') },
+        {
+          label: 'New task',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => getWindow()?.webContents.send('menu:new')
+        },
         { type: 'separator' },
         ...(isMac
           ? ([{ role: 'close' }] as Electron.MenuItemConstructorOptions[])
@@ -225,7 +247,11 @@ function buildMenu(getWindow: () => BrowserWindow | null): void {
     {
       label: 'View',
       submenu: [
-        { label: 'Command bar', accelerator: 'CmdOrCtrl+K', click: () => getWindow()?.webContents.send('menu:command') },
+        {
+          label: 'Command bar',
+          accelerator: 'CmdOrCtrl+K',
+          click: () => getWindow()?.webContents.send('menu:command')
+        },
         {
           label: 'Trace for this task',
           accelerator: 'CmdOrCtrl+T',
@@ -340,7 +366,7 @@ function registerIpc(): void {
     store.setAllPaused(on)
   })
 
-  ipcMain.handle('app:economics', () => economics(store.spans, store.ledger))
+  ipcMain.handle('app:economics', () => economics(store.spans))
 
   ipcMain.handle('task:checkpoint', async (_e, id: string) => {
     const task = store.byId(id)
@@ -391,7 +417,8 @@ function registerIpc(): void {
   ipcMain.handle('window:action', (_e, action: 'minimize' | 'maximize' | 'close') => {
     if (!windowRef) return
     if (action === 'minimize') windowRef.minimize()
-    else if (action === 'maximize') windowRef.isMaximized() ? windowRef.unmaximize() : windowRef.maximize()
+    else if (action === 'maximize')
+      windowRef.isMaximized() ? windowRef.unmaximize() : windowRef.maximize()
     else windowRef.close()
   })
 

@@ -42,7 +42,7 @@ const WORK: Record<string, [number, number]> = {
 const jitter = ([lo, hi]: [number, number]): number =>
   Math.round((lo + Math.random() * (hi - lo)) * CADENCE)
 
-const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o)) as T
+const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o)) as T
 
 const fill = (str: string, vars: Record<string, string>): string =>
   String(str ?? '').replace(/\{(\w+)\}/g, (_, k: string) => vars[k] ?? '')
@@ -729,7 +729,9 @@ class Runner {
       if (value === 'no' || value === '__none') {
         store.say(
           t,
-          value === '__none' ? 'Neither. Looking for more options.' : 'You said not yet. I’ll hold.',
+          value === '__none'
+            ? 'Neither. Looking for more options.'
+            : 'You said not yet. I’ll hold.',
           'you'
         )
         t.prevState = 'working'
@@ -853,7 +855,12 @@ export function describeSpan(span: SpanRecord): string {
    Seed — a believable morning, already in motion.
    ========================================================================== */
 
-type SeedLine = [minutesFromStart: number, text: string, code: string, tone: Task['story'][number]['tone']]
+type SeedLine = [
+  minutesFromStart: number,
+  text: string,
+  code: string,
+  tone: Task['story'][number]['tone']
+]
 
 function finished(
   store: Store,
@@ -912,11 +919,31 @@ export function seed(store: Store): void {
       'Check the new policy line by line'
     ],
     [
-      [0, 'Compared nine quotes for exactly the same cover.', 'tool.quotes(cover=current) → 9 results · 2.8s', ''],
-      [8, 'Found the same cover for $212 less a year.', 'llm.compare(quotes=9) → best=Harbor Mutual · 512 tokens', ''],
+      [
+        0,
+        'Compared nine quotes for exactly the same cover.',
+        'tool.quotes(cover=current) → 9 results · 2.8s',
+        ''
+      ],
+      [
+        8,
+        'Found the same cover for $212 less a year.',
+        'llm.compare(quotes=9) → best=Harbor Mutual · 512 tokens',
+        ''
+      ],
       [12, 'You said yes to switching.', 'user.approve', 'you'],
-      [16, 'Checked the new policy matches the old one, line by line.', 'verify.diff(policy_old, policy_new) → 0 differences in cover', ''],
-      [18, 'Renewed. New policy saved to your files.', 'chain.task_complete(goal="insurance") → verified', 'done']
+      [
+        16,
+        'Checked the new policy matches the old one, line by line.',
+        'verify.diff(policy_old, policy_new) → 0 differences in cover',
+        ''
+      ],
+      [
+        18,
+        'Renewed. New policy saved to your files.',
+        'chain.task_complete(goal="insurance") → verified',
+        'done'
+      ]
     ],
     {
       lines: [
@@ -938,8 +965,18 @@ export function seed(store: Store): void {
     'Pay the electricity bill',
     ["Find this month's bill", 'Check it against your usual', 'Pay it', 'Confirm it cleared'],
     [
-      [0, "Found this month's bill: $86.40.", 'email.search(from="citypower") → invoice #88213', ''],
-      [4, 'It matches your usual amount, so it was okay to pay.', 'policy.auto_approve(recurring, within 10% of avg) → ok', 'you'],
+      [
+        0,
+        "Found this month's bill: $86.40.",
+        'email.search(from="citypower") → invoice #88213',
+        ''
+      ],
+      [
+        4,
+        'It matches your usual amount, so it was okay to pay.',
+        'policy.auto_approve(recurring, within 10% of avg) → ok',
+        'you'
+      ],
       [6, 'Paid. Receipt saved.', 'chain.task_complete(goal="bill") → verified', 'done']
     ],
     {
@@ -985,7 +1022,9 @@ export function seed(store: Store): void {
   store.tasks.unshift(refund)
   store.launch(refund)
 
-  const dinner = store.makeTask('Plan Saturday dinner for six, one vegetarian', { when: 'By Friday' })
+  const dinner = store.makeTask('Plan Saturday dinner for six, one vegetarian', {
+    when: 'By Friday'
+  })
   store.adopt(dinner, 'dinner')
   dinner.line = 'Queued behind the morning list. Nothing is due until Friday.'
   dinner.story = [

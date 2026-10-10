@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { AppState } from '../../../shared/types'
 import { cx } from '../lib/format'
 import { api, toast, useUI } from '../store'
@@ -22,6 +22,16 @@ interface Command {
  */
 export function CommandBar({ state }: { state: AppState }): React.JSX.Element {
   const open = useUI((s) => s.palette)
+
+  return (
+    <AnimatePresence>
+      {/* Keyed so every opening starts from a clean query and cursor. */}
+      {open && <Palette key="palette" state={state} />}
+    </AnimatePresence>
+  )
+}
+
+function Palette({ state }: { state: AppState }): React.JSX.Element {
   const toggle = useUI((s) => s.togglePalette)
   const under = useUI((s) => s.under)
   const openId = useUI((s) => s.openId)
@@ -29,14 +39,6 @@ export function CommandBar({ state }: { state: AppState }): React.JSX.Element {
   const showTrace = useUI((s) => s.showTrace)
   const [q, setQ] = useState('')
   const [cursor, setCursor] = useState(0)
-  const listRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (open) {
-      setQ('')
-      setCursor(0)
-    }
-  }, [open])
 
   const close = (): void => toggle(false)
 
@@ -56,7 +58,11 @@ export function CommandBar({ state }: { state: AppState }): React.JSX.Element {
       {
         id: 'pause',
         label: state.allPaused ? 'Resume everything' : 'Pause everything',
-        icon: state.allPaused ? <I.Play className="[&_svg]:h-[14px] [&_svg]:w-[14px]" /> : <I.Pause className="[&_svg]:h-[14px] [&_svg]:w-[14px]" />,
+        icon: state.allPaused ? (
+          <I.Play className="[&_svg]:h-[14px] [&_svg]:w-[14px]" />
+        ) : (
+          <I.Pause className="[&_svg]:h-[14px] [&_svg]:w-[14px]" />
+        ),
         run: () => {
           void api.pauseAll(!state.allPaused)
           close()
@@ -167,92 +173,91 @@ export function CommandBar({ state }: { state: AppState }): React.JSX.Element {
 
   const matches = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    const cmds = needle
-      ? commands.filter((c) => c.label.toLowerCase().includes(needle))
-      : commands
+    const cmds = needle ? commands.filter((c) => c.label.toLowerCase().includes(needle)) : commands
     return [...cmds.slice(0, needle ? 5 : 7), ...tasks]
   }, [q, commands, tasks])
 
-  useEffect(() => setCursor(0), [q])
+  // Clamp rather than reset in an effect: typing narrows the list, and the
+  // cursor should never point past its end.
+  const active = Math.min(cursor, Math.max(0, matches.length - 1))
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-        >
-          <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px]" onClick={close} />
-          <motion.div
-            initial={{ opacity: 0, y: -10, scale: 0.985 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.99 }}
-            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-            className="relative w-[600px] overflow-hidden rounded-[14px] border border-line-2 bg-ink-1 shadow-[0_28px_90px_-12px_rgba(0,0,0,0.85)]"
-          >
-            <div className="flex items-center gap-2.5 border-b border-line px-4 py-3">
-              <I.Search className="text-fg-4 [&_svg]:h-[15px] [&_svg]:w-[15px]" />
-              <input
-                autoFocus
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') return close()
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault()
-                    setCursor((c) => Math.min(matches.length - 1, c + 1))
-                  }
-                  if (e.key === 'ArrowUp') {
-                    e.preventDefault()
-                    setCursor((c) => Math.max(0, c - 1))
-                  }
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    matches[cursor]?.run()
-                  }
-                }}
-                placeholder="Search your list, or type a command…"
-                className="min-w-0 flex-1 bg-transparent text-[14px] placeholder:text-fg-5"
-              />
-              <Kbd>esc</Kbd>
-            </div>
+    <motion.div
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+    >
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px]" onClick={close} />
+      <motion.div
+        initial={{ opacity: 0, y: -10, scale: 0.985 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -8, scale: 0.99 }}
+        transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+        className="relative w-[600px] overflow-hidden rounded-[14px] border border-line-2 bg-ink-1 shadow-[0_28px_90px_-12px_rgba(0,0,0,0.85)]"
+      >
+        <div className="flex items-center gap-2.5 border-b border-line px-4 py-3">
+          <I.Search className="text-fg-4 [&_svg]:h-[15px] [&_svg]:w-[15px]" />
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value)
+              setCursor(0)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') return close()
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                setCursor((c) => Math.min(matches.length - 1, c + 1))
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                setCursor((c) => Math.max(0, c - 1))
+              }
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                matches[active]?.run()
+              }
+            }}
+            placeholder="Search your list, or type a command…"
+            className="min-w-0 flex-1 bg-transparent text-[14px] placeholder:text-fg-5"
+          />
+          <Kbd>esc</Kbd>
+        </div>
 
-            <div ref={listRef} className="max-h-[46vh] overflow-y-auto py-1.5">
-              {matches.length === 0 && (
-                <p className="px-4 py-6 text-center text-[13px] text-fg-5">Nothing matches “{q}”.</p>
+        <div className="max-h-[46vh] overflow-y-auto py-1.5">
+          {matches.length === 0 && (
+            <p className="px-4 py-6 text-center text-[13px] text-fg-5">Nothing matches “{q}”.</p>
+          )}
+          {matches.map((c, i) => (
+            <button
+              key={c.id}
+              type="button"
+              onMouseEnter={() => setCursor(i)}
+              onClick={c.run}
+              className={cx(
+                'flex w-full items-center gap-3 px-4 py-[7px] text-left transition-colors',
+                i === active ? 'bg-white/[0.06]' : ''
               )}
-              {matches.map((c, i) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onMouseEnter={() => setCursor(i)}
-                  onClick={c.run}
-                  className={cx(
-                    'flex w-full items-center gap-3 px-4 py-[7px] text-left transition-colors',
-                    i === cursor ? 'bg-white/[0.06]' : ''
-                  )}
-                >
-                  <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center text-fg-3">
-                    {c.icon}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{c.label}</span>
-                  {c.hint && <span className="shrink-0 text-[11px] text-needs">{c.hint}</span>}
-                  {c.keys && (
-                    <span className="flex shrink-0 gap-1">
-                      {c.keys.map((k) => (
-                        <Kbd key={k}>{k}</Kbd>
-                      ))}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+            >
+              <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center text-fg-3">
+                {c.icon}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{c.label}</span>
+              {c.hint && <span className="shrink-0 text-[11px] text-needs">{c.hint}</span>}
+              {c.keys && (
+                <span className="flex shrink-0 gap-1">
+                  {c.keys.map((k) => (
+                    <Kbd key={k}>{k}</Kbd>
+                  ))}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </motion.div>
+    </motion.div>
   )
 }
