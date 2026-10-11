@@ -1,8 +1,8 @@
 # Done. — desktop
 
-**The to-do list that finishes itself.** You write down what you need. An agent does
-the work, says what it's doing in plain words, and only interrupts when it truly
-needs you.
+**The to-do list that actually does things.** You write down what you need. An agent plans it,
+picks its own tools, drives a real browser and a real shell, narrates each step in plain words,
+and stops to ask before anything it cannot take back.
 
 Electron + React + TypeScript + Tailwind. The agent runtime, the policy engine, the
 tracing and the state all live in the **main process**; the renderer only draws what
@@ -21,15 +21,38 @@ npm run pack:win     # unpacked build in release/
 
 ### Environment
 
-| Variable           | What it does                                                                                                                                              |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+Put a `.env` at the repo root, or anywhere above this folder — the app walks up looking
+for one. It can also live in `~/.done/.env`.
+
+| Variable | What it does |
+| --- | --- |
+| `LLM_API_KEY` | **Required.** A Groq key. Without it the app opens, says it has no brain, and refuses to fake progress. |
 | `NEATLOGS_API_KEY` | Turns on trace export to [neatlogs](https://neatlogs.com). Without it spans are still recorded locally and shown in the app; they simply aren't uploaded. |
-| `DONE_FRESH=1`     | Starts a clean seeded morning instead of restoring your saved list.                                                                                       |
-| `DONE_CADENCE=1.6` | Speeds up the demo pacing (`0.5` is frantic, `2` is very slow).                                                                                           |
-| `DONE_SHOT=1`      | Walks the app through its states and writes screenshots to `docs/shots`.                                                                                  |
+| `DONE_MODEL` | Override the brain. Default `openai/gpt-oss-120b`. |
+| `DONE_GUARD_MODEL` | Override the injection classifier. Default `meta-llama/llama-prompt-guard-2-86m`. |
+| `DONE_CODE_MODEL` | Model passed through to the `opencode` CLI when `code_agent` runs. |
+| `DONE_FRESH=1` | Ignore the saved list and start empty. |
+| `DONE_DEBUG=1` | Print every model prompt and reply to stderr. |
+| `DONE_SHOT=1` | Drive a real task through the UI and write screenshots to `docs/shots`. |
 
 Your list is saved to `app.getPath('userData')/state.json` and restored on launch.
 **Settings → Connections → Show my data on disk** opens it.
+
+---
+
+## Testing the loop
+
+There is a second entry point, `src/main/harness.ts`, that runs the same `Store`, the
+same model and the same tools with no window in the way and prints the trace:
+
+```bash
+npm run build
+DONE_LIMITS='{"spend":1}' DONE_AUTO=yes npx electron out/main/harness.js "your goal here"
+```
+
+It reports the spans, the token counts, the real cost and whether verification passed.
+Leave `DONE_AUTO` off and the run **stops and waits** at the first thing it cannot take
+back — which is the product's promise, so the harness will not fake an answer.
 
 ---
 
@@ -62,48 +85,64 @@ that closes. Everything respects `prefers-reduced-motion`.
 
 ```
 src/
-  shared/types.ts          the only contract between main and renderer
+  shared/types.ts          the contract between main and renderer (connectors, tasks, traces)
   main/
     index.ts               window, tray, menu, IPC, persistence
-    agent.ts               the runtime: tasks, undo, policy, seeding
-    scripts.ts             beats — each one is a span and a sentence
+    agent.ts               the 2-phase loop: route → dispatch → execute → verify
+    connectors/            Connected Agents Network (Roma style):
+      router.ts            LLM Dispatcher Brain & context enricher
+      registry.ts          connectors registry & dynamic configuration
+      claude.ts            Claude & Claude Code (coding & terminal)
+      grok.ts              xAI Grok (real-time web intelligence)
+      chatgpt.ts           ChatGPT & Codex (deep reasoning & math)
+      muse.ts              Muse Spark (creative ideation & visual sparks)
+      gemini.ts            Gemini CLI (1M+ token whole-repo context)
+      roma.ts              Roma MCP Server (api.roma.app/mcp bus)
+      pi.ts                Pi Agent Core (19 native desktop tools)
+    pi.ts                  @earendil-works/pi-agent-core & @earendil-works/pi-ai runtime
+    tools/                 the nineteen real tools
     integrations.ts        neatlogs tracing + the Entire CLI bridge
     finance.ts             the cfo.ai unit-economics model
   preload/index.ts         the contextBridge API
   renderer/src/
     App.tsx                layout
-    components/            TitleBar, TaskList, Detail, Sheets, TraceSheet, CommandBar…
+    components/            TitleBar, TaskList, Detail, Sheets (Connected Agents Grid), CommandBar…
 ```
 
-### The agent loop
+### Connected Agents & Intelligent Routing (Roma Style)
 
-A task is a sequence of **beats**. A beat is one thing the agent does, and it is
-simultaneously:
+We don't force a single monolithic LLM to execute every task. Following the paradigm of **Roma** ([roma.app/agents](https://roma.app/agents)), Done acts as a shared list and intelligent coordinator across specialized connected agents:
 
-- a span in the neatlogs trace, and
-- the sentence the agent says out loud.
+1. **The LLM as Intelligent Router & UI Harmonizer:**
+   - Evaluates the user's task prompt, deadline, budget, and local repository context.
+   - Intelligently chooses the best connector (or honors manual user selection from the `Via` picker):
+     - **Claude Code**: Multi-file refactoring, code editing, terminal commands, test suites.
+     - **xAI Grok**: Live web intelligence, breaking trends, rapid unfiltered analysis.
+     - **ChatGPT & Codex**: Structured multi-step reasoning, mathematical deduction, analytical synthesis.
+     - **Muse Spark**: Divergent creative ideation, product metaphors, UX naming.
+     - **Gemini CLI**: Whole-codebase comprehension across 1M+ tokens.
+     - **Roma MCP Server**: Universal Model Context Protocol sync (`https://api.roma.app/mcp`) for cross-agent task buses.
+     - **Pi Agent Core**: Local desktop tools (Chromium DevTools, shell, clipboard, file system).
+   - Generates trace spans (`router.dispatch`) explaining *why* the task was routed to that agent.
+   - Cleans up and harmonizes execution output so the user enjoys a serene, peaceful UI without raw JSON clutter.
 
-There is no second description of a step. `name`, `input` and `output` become both
-the machine line under _Show what's underneath_ and the raw material for the plain
-sentence. If the trace is wrong, the sentence is wrong — which is the point.
-
-Each run is a real `trace()` rooted in a `WORKFLOW` span, with `TOOL` / `LLM` /
-`RETRIEVER` / `GUARDRAIL` spans nested underneath it. An approval is a `GUARDRAIL`
-span, so the moment it stopped to ask you is in the trace too.
+2. **The Execution & Verification Loop:**
+   - The selected connector executes with live streaming tokens (`thought` and `story`).
+   - Every reversible and irreversible action honors the user's spending limits and approval guards.
+   - Strict independent verification confirms evidence against the user goal before completing and sealing a verified receipt.
 
 ### Policy
 
 Limits really change behaviour:
 
-- **Spend up to `$0` / `$25` / `$100` without asking.** At `$25` a `$24` refund goes
-  through on its own; a `$120` plumber still asks.
-- **Show messages before they're sent.** Turn it off and the gym cancellation is sent
-  without you.
+- **Run on its own until it costs `$0` / `5¢` / `25¢` / `$1`.** This is real money:
+  every model call returns its token count and cost is computed at Groq's published
+  rates. At `$0` it stops and asks before the first call costs anything.
 - **Never do anything irreversible.** Always asks. This one is not a switch.
 - **Quiet hours.** Holds questions overnight.
 
 Anything declined puts the task to sleep rather than throwing the work away — resume
-whenever.
+whenever. Steering a stopped task starts it again with your instruction as context.
 
 ### Control
 
@@ -112,8 +151,8 @@ Four verbs, never more than one keystroke away, on every task:
 `Pause` · `Steer` · `Take over` · `Undo`
 
 **Steer** is the interesting one. Say "actually, cheaper" or "not Fridays" and the
-plan is rewritten mid-stride by a real `llm.replan` span. **Undo** rewinds the live
-task object in place, so a running agent rewinds rather than restarting.
+next decision honours it. **Undo** rewinds the live task object in place, so a
+running agent rewinds rather than restarting.
 
 ### Keyboard
 
@@ -168,19 +207,28 @@ margin, and three scenarios.
 
 ## Honest limitations
 
-- **The tools are simulated.** Search, browser, email and payments are scripted
-  adapters with realistic latency, not live integrations. The loop, the policy, the
-  tracing, the recovery and the verification are real; the world it acts on is not.
-- **Token counts and costs are estimates** attached to spans, not billed figures.
-- **No accounts, no sync, no model calls.** There is no LLM in the loop yet — the
-  planner is deterministic. Wiring a real model means replacing
-  `src/main/scripts.ts` beats with `llm` spans and a provider client; the trace tree,
-  the UI and the policy engine already expect them.
+- **A 120B model is not infallible.** It will occasionally chase a dead end. The loop
+  bounds that — a turn cap, refusal to re-run a call that already failed when nothing
+  has changed, and a verification pass before anything is called done — rather than
+  pretending it does not happen.
+- **The coding agent is delegated.** `code_agent` shells out to the real `opencode`
+  CLI. This app does not implement a coding agent of its own.
+- **The browser needs a desktop session.** It is a real hidden Chromium window driven
+  through the DevTools protocol, so it needs a machine with a display — no headless CI.
+- **One machine, one person.** No accounts, no sync, no shared list. The sandbox is
+  your home folder and this project, not a container.
+- **Free-tier quota is the binding constraint**, not model quality. Runs are tens of
+  seconds and occasionally wait out a per-minute token limit. Retries honour the delay
+  the provider asks for.
+- **Token counts are real; billed cost is list price.** The counts are what the
+  provider returned, priced at its published per-million rates. On a free tier that
+  overstates what you actually paid, which is the conservative direction for a margin
+  model.
 - Spans for steps carried over from a previous session aren't recovered, and the
   trace sheet says so rather than quietly showing a shorter tree.
 
 ## Next
 
-1. Swap the scripted beats for a real planner/executor with live tools.
-2. Push received approval questions to a tray badge instead of relying on the window.
-3. Recurring tasks — the `when` chip is already carried end to end.
+1. Tray badge for pending approvals, so the app can be trusted in the background.
+2. Recurring tasks — the `when` chip is already carried end to end.
+3. Per-tool cost hints, so the spend cap can cover paid APIs as well as model calls.
