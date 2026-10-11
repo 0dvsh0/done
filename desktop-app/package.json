@@ -17,6 +17,8 @@
     "pack:linux": "npm run build && electron-builder --linux --dir"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "^1.1.0",
+    "@earendil-works/pi-ai": "^1.1.0",
     "neatlogs": "^1.1.28"
   },
   "devDependencies": {
