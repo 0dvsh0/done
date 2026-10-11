@@ -9,7 +9,7 @@ import { StatusBar, DayHeader } from './components/StatusBar'
 import { TaskList, Composer } from './components/TaskList'
 import { TitleBar, Toast } from './components/TitleBar'
 import { TraceSheet } from './components/TraceSheet'
-import { useUI, useWorld } from './store'
+import { useUI, useWorld, groupNames } from './store'
 
 export default function App(): React.JSX.Element {
   const state = useWorld((s) => s.state)
@@ -38,7 +38,7 @@ export default function App(): React.JSX.Element {
           <div className="flex min-h-0 flex-1">
             <main className="flex min-w-0 flex-1 flex-col">
               <DayHeader state={state} />
-              <Composer limits={state.limits} />
+              <Composer limits={state.limits} groups={groupNames(state)} />
               <TaskList state={state} />
             </main>
 

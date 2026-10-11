@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import type { AppState, Task } from '../../shared/types'
-import { api, ordered, toast, useUI } from './store'
+import { api, isSectionOpen, sections, toast, useUI } from './store'
 
 const isTyping = (el: EventTarget | null): boolean => {
   const node = el as HTMLElement | null
@@ -22,7 +22,6 @@ export function useHotkeys(state: AppState | null): void {
   const cursorId = useUI((s) => s.cursorId)
   const sheet = useUI((s) => s.sheet)
   const palette = useUI((s) => s.palette)
-  const doneOpen = useUI((s) => s.doneOpen)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -80,8 +79,13 @@ export function useHotkeys(state: AppState | null): void {
 
       if (typing || overlay) return
 
+      // The rows you can actually see and reach, in the order they are drawn —
+      // sections that are folded away are rows that aren't there.
+      const ui = useUI.getState()
       const order: Task[] = state
-        ? ordered(state).needs.concat(ordered(state).going, doneOpen ? ordered(state).done : [])
+        ? sections(state)
+            .filter((section) => isSectionOpen(section, ui.doneOpen, ui.folded))
+            .flatMap((section) => section.tasks)
         : []
       const current = state?.tasks.find((t) => t.id === (openId ?? cursorId))
       const index = current ? order.findIndex((t) => t.id === current.id) : -1
@@ -179,7 +183,6 @@ export function useHotkeys(state: AppState | null): void {
     sheet,
     palette,
     under,
-    doneOpen,
     openTask,
     closeTask,
     setCursor,

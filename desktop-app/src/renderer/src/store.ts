@@ -1,7 +1,7 @@
 import { create } from 'zustand'
-import type { AppState, ControlAction, CreateOptions, Limits } from '../../shared/types'
+import type { AppState, ControlAction, CreateOptions, Limits, Task } from '../../shared/types'
 
-export type SheetId = 'limits' | 'shortcuts' | 'business' | 'connections' | null
+export type SheetId = 'limits' | 'shortcuts' | 'agent' | 'connections' | null
 
 interface UI {
   /* which task's detail is open, and where the keyboard cursor is */
@@ -15,6 +15,8 @@ interface UI {
   under: boolean
   /* done groups can be folded away */
   doneOpen: boolean
+  /* named groups fold away too, remembered one by one */
+  folded: Record<string, boolean>
   toast: { text: string; undo: boolean } | null
   /* window is maximized — swaps the window-control glyph */
   maximized: boolean
@@ -27,6 +29,8 @@ interface UI {
   showTrace(id: string | null): void
   toggleUnder(): void
   setDoneOpen(v: boolean): void
+  toggleFold(name: string): void
+  isFolded(name: string): boolean
   say(text: string, undo?: boolean): void
   clearToast(): void
   setMaximized(v: boolean): void
@@ -42,6 +46,11 @@ export const useWorld = create<World>((set) => ({
   setState: (state) => set({ state })
 }))
 
+/** A group is folded only if you folded it; anything new starts open. */
+function isFoldedIn(folded: Record<string, boolean>, name: string): boolean {
+  return folded[name] ?? false
+}
+
 export const useUI = create<UI>((set) => ({
   openId: null,
   cursorId: null,
@@ -50,6 +59,7 @@ export const useUI = create<UI>((set) => ({
   traceFor: null,
   under: false,
   doneOpen: true,
+  folded: {},
   toast: null,
   maximized: false,
 
@@ -61,6 +71,10 @@ export const useUI = create<UI>((set) => ({
   showTrace: (traceFor) => set({ traceFor }),
   toggleUnder: () => set((s) => ({ under: !s.under })),
   setDoneOpen: (doneOpen) => set({ doneOpen }),
+  toggleFold: (name) =>
+    set((s) => ({ folded: { ...s.folded, [name]: !isFoldedIn(s.folded, name) } })),
+  // Everything starts open. Folding is a thing you do, not one you undo.
+  isFolded: (name) => isFoldedIn(useUI.getState().folded, name),
   say: (text, undo = false) => set({ toast: { text, undo } }),
   clearToast: () => set({ toast: null }),
   setMaximized: (maximized) => set({ maximized })
@@ -85,33 +99,116 @@ export const api = {
   dismiss: (id: string) => window.done.dismiss(id),
   clearFinished: () => window.done.clearFinished(),
   limits: (patch: Partial<Limits>) => window.done.setLimits(patch),
-  pauseAll: (on: boolean) => window.done.setAllPaused(on)
+  pauseAll: (on: boolean) => window.done.setAllPaused(on),
+  setGroup: (id: string, group: string | null) => window.done.setGroup(id, group),
+  renameGroup: (from: string, to: string) => window.done.renameGroup(from, to),
+  removeGroup: (name: string) => window.done.removeGroup(name),
+  setConnectorConfig: (
+    id: import('../../shared/types').ConnectorId,
+    config: { apiKey?: string; endpoint?: string }
+  ) => window.done.setConnectorConfig(id, config)
 }
 
 /* --------------------------------------------------------------- derived */
 
-export const groupOf = (s: AppState['tasks'][number]): 'needs' | 'going' | 'done' => {
-  if (s.state === 'needs') return 'needs'
-  if (s.state === 'done' || s.state === 'stopped') return 'done'
-  return 'going'
+export type SectionKind = 'needs' | 'going' | 'group' | 'done'
+
+export interface Section {
+  /** Stable identity for a section — the fold map and React keys both use it. */
+  key: string
+  kind: SectionKind
+  label: string
+  tasks: Task[]
 }
 
-export function ordered(state: AppState): Record<'needs' | 'going' | 'done', AppState['tasks']> {
-  const buckets: Record<'needs' | 'going' | 'done', AppState['tasks']> = {
-    needs: [],
-    going: [],
-    done: []
+/** Group names are matched the way the main process matches them: case-blind. */
+const groupKey = (name: string): string => name.trim().toLowerCase()
+
+/** Every group that has at least one task in it, alphabetically. */
+export function groupNames(state: AppState): string[] {
+  const names = new Map<string, string>()
+  for (const t of state.tasks) {
+    if (!t.group?.trim()) continue
+    const key = groupKey(t.group)
+    if (!names.has(key)) names.set(key, t.group.trim())
   }
-  for (const t of state.tasks) buckets[groupOf(t)].push(t)
-  buckets.done.sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))
-  return buckets
+  return [...names.values()].sort((a, b) => a.localeCompare(b))
+}
+
+/**
+ * The list, top to bottom, exactly as it is drawn.
+ *
+ * "Needs you" and "Done today" stay where they have always been — a task that
+ * needs a decision is never filed away out of sight. A task you have grouped
+ * sits under its group instead of under "Going", so every row is drawn once
+ * and only once.
+ */
+export function sections(state: AppState): Section[] {
+  const needs: Task[] = []
+  const going: Task[] = []
+  const done: Task[] = []
+  const groups = new Map<string, { name: string; tasks: Task[] }>()
+
+  for (const t of state.tasks) {
+    if (t.state === 'needs') {
+      needs.push(t)
+      continue
+    }
+    if (t.state === 'done' || t.state === 'stopped') {
+      done.push(t)
+      continue
+    }
+    const name = t.group?.trim()
+    if (!name) {
+      going.push(t)
+      continue
+    }
+    const key = groupKey(name)
+    const bucket = groups.get(key)
+    if (bucket) bucket.tasks.push(t)
+    else groups.set(key, { name, tasks: [t] })
+  }
+
+  done.sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))
+
+  const out: Section[] = []
+  if (needs.length) out.push({ key: 'needs', kind: 'needs', label: 'Needs you', tasks: needs })
+  if (going.length) out.push({ key: 'going', kind: 'going', label: 'Going', tasks: going })
+  for (const bucket of [...groups.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+    out.push({
+      key: `group:${groupKey(bucket.name)}`,
+      kind: 'group',
+      label: bucket.name,
+      tasks: bucket.tasks
+    })
+  }
+  if (done.length) out.push({ key: 'done', kind: 'done', label: 'Done today', tasks: done })
+  return out
+}
+
+/** Whether a section is showing right now, given how the fold switches sit. */
+export function isSectionOpen(
+  section: Section,
+  doneOpen: boolean,
+  folded: Record<string, boolean>
+): boolean {
+  if (section.kind === 'done') return doneOpen
+  if (section.kind === 'group') return !isFoldedIn(folded, section.key)
+  return true
 }
 
 export function summary(state: AppState): string {
-  const { needs, going } = ordered(state)
-  const live = going.filter((t) => t.state !== 'paused' && t.state !== 'you').length
+  const needs = state.tasks.filter((t) => t.state === 'needs').length
+  const live = state.tasks.filter(
+    (t) =>
+      t.state !== 'needs' &&
+      t.state !== 'done' &&
+      t.state !== 'stopped' &&
+      t.state !== 'paused' &&
+      t.state !== 'you'
+  ).length
   if (state.allPaused) return 'Everything’s paused. Nothing will move until you say.'
-  if (!needs.length && !live) return 'Everything’s done. Nothing needs you.'
+  if (!needs && !live) return 'Everything’s done. Nothing needs you.'
   const words = [
     'No',
     'One',
@@ -126,10 +223,8 @@ export function summary(state: AppState): string {
     'Ten'
   ]
   const parts: string[] = []
-  if (needs.length) {
-    parts.push(
-      `${words[needs.length] ?? needs.length} thing${needs.length === 1 ? '' : 's'} need you.`
-    )
+  if (needs) {
+    parts.push(`${words[needs] ?? needs} thing${needs === 1 ? '' : 's'} need you.`)
   }
   if (live) parts.push(`${words[live] ?? live} going quietly.`)
   return parts.join(' ')
