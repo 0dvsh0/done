@@ -3,29 +3,34 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
- * Development only. When `DONE_SHOT` is set, the app walks itself through a
- * few states and writes PNGs to docs/shots — the same screenshots that go in
- * the README, taken from the real window.
+ * Development only. With `DONE_SHOT` set, the app drives *itself* through a
+ * real task and writes PNGs to docs/shots — the screenshots in the README,
+ * taken from the real window, with a real agent behind it.
+ *
+ * There is nothing to fake here: the empty state is the empty state, the trace
+ * is the trace the run actually produced, and the economics sheet is computed
+ * from the spans that run exported. If the model is not connected the run
+ * simply will not finish and the screenshots will show that instead.
  */
 export async function captureSequence(getWindow: () => BrowserWindow | null): Promise<void> {
   const dir = join(app.getAppPath(), 'docs', 'shots')
   mkdirSync(dir, { recursive: true })
 
-  const w0 = getWindow()
-  w0?.webContents.on('console-message', (_e, level, message, line, source) => {
-    console.log(`[renderer] ${level} ${message} (${source}:${line})`)
-  })
-  w0?.webContents.on('render-process-gone', (_e, details) => {
-    console.log('[renderer] gone:', JSON.stringify(details))
-  })
-  w0?.webContents.on('preload-error', (_e, p, err) => {
-    console.log('[preload] error', p, err)
-  })
-
   const step = (name: string): void => {
     process.stdout.write(`[capture] ${name}\n`)
   }
   const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+  const w0 = getWindow()
+  w0?.webContents.on('console-message', (_e, level, message, line, source) => {
+    process.stdout.write(`[renderer] ${level} ${message} (${source}:${line})\n`)
+  })
+  w0?.webContents.on('render-process-gone', (_e, details) => {
+    process.stdout.write('[renderer] gone: ' + JSON.stringify(details) + '\n')
+  })
+  w0?.webContents.on('preload-error', (_e, p, err) => {
+    process.stdout.write('[preload] error ' + p + ' ' + String(err) + '\n')
+  })
 
   /** Never let one stuck call take the whole run down. */
   const js = async (code: string, label: string): Promise<unknown> => {
@@ -34,22 +39,22 @@ export async function captureSequence(getWindow: () => BrowserWindow | null): Pr
     try {
       const out = await Promise.race([
         w.webContents.executeJavaScript(code),
-        new Promise((r) => setTimeout(() => r('__timeout__'), 4000))
+        new Promise((r) => setTimeout(() => r('__timeout__'), 6000))
       ])
-      if (out === '__timeout__') console.log(`[capture] ${label} timed out`)
+      if (out === '__timeout__') step(`${label} timed out`)
       return out
     } catch (err) {
-      console.log(`[capture] ${label} threw:`, err)
+      step(`${label} threw: ${String(err)}`)
       return null
     }
   }
 
   const shot = async (name: string): Promise<void> => {
-    step(name)
     const w = getWindow()
     if (!w) return
     const image = await w.webContents.capturePage()
     writeFileSync(join(dir, `${name}.png`), image.toPNG())
+    step(name)
   }
 
   const click = (selector: string, index = 0): Promise<unknown> =>
@@ -64,6 +69,19 @@ export async function captureSequence(getWindow: () => BrowserWindow | null): Pr
       `(() => { for (const b of document.querySelectorAll('button')) {
          if ((b.textContent||'').trim().startsWith(${JSON.stringify(prefix)})) { b.click(); return true } } return false })()`,
       `clickText ${prefix}`
+    )
+
+  const type = (selector: string, value: string): Promise<unknown> =>
+    js(
+      `(() => {
+         const el = document.querySelector(${JSON.stringify(selector)});
+         if (!el) return false;
+         const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement : window.HTMLInputElement;
+         const setter = Object.getOwnPropertyDescriptor(proto.prototype, 'value').set;
+         setter.call(el, ${JSON.stringify(value)});
+         el.dispatchEvent(new Event('input', {bubbles:true}));
+         return true })()`,
+      `type ${selector}`
     )
 
   const key = (k: string, mod = false): Promise<unknown> =>
@@ -84,38 +102,41 @@ export async function captureSequence(getWindow: () => BrowserWindow | null): Pr
 
   try {
     getWindow()?.focus()
-    await wait(Number(process.env['DONE_SHOT_WAIT'] ?? 6000))
-    await shot('01-list')
+    await wait(2500)
+    await shot('01-empty')
 
-    await key('k', true)
-    await wait(700)
-    await shot('02-command')
-    await key('Escape')
+    // A real goal, run by the real agent. It does not have to finish inside the
+    // capture window — these are screenshots of the app working, not a
+    // choreographed sequence.
+    await type('[data-composer]', 'What is the current Node.js LTS version? Search the web.')
     await wait(500)
+    await shot('02-composed')
+
+    await js(
+      `(() => { const f = document.querySelector('[data-composer]')?.closest('form');
+        if (f) { f.requestSubmit ? f.requestSubmit() : f.dispatchEvent(new Event('submit', {bubbles:true})); return true } return false })()`,
+      'submit'
+    )
+    await wait(9000)
+    await shot('03-working')
 
     await click('[data-row]')
     await wait(1400)
-    await shot('03-detail')
+    await shot('04-detail')
 
     await clickText('Show what')
-    await wait(800)
-    await shot('04-underneath')
+    await wait(900)
+    await shot('05-underneath')
 
     await clickText('Trace')
-    await wait(1000)
-    await shot('05-trace')
-    await closeTop()
-    await wait(800)
-
-    await key(',')
-    await wait(900)
-    await shot('06-limits')
+    await wait(1200)
+    await shot('06-trace')
     await closeTop()
     await wait(700)
 
-    await key('?')
-    await wait(800)
-    await shot('07-shortcuts')
+    await key(',')
+    await wait(900)
+    await shot('07-limits')
     await closeTop()
     await wait(700)
 
@@ -127,34 +148,16 @@ export async function captureSequence(getWindow: () => BrowserWindow | null): Pr
 
     getWindow()?.webContents.send('menu:command')
     await wait(600)
-    await js(
-      `(() => { const i = document.querySelector('input[placeholder^="Search your list"]');
-        if (!i) return false;
-        const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-        set.call(i, 'Pay per period');
-        i.dispatchEvent(new Event('input', {bubbles:true}));
-        return true })()`,
-      'type economics'
-    )
+    await type('input[placeholder^="Search your list"]', 'Pay per period')
     await wait(700)
     await shot('09-economics')
     await key('Escape')
     await wait(700)
 
-    // Change a limit. That is a change to how the agent behaves, so it
-    // should leave a commit behind for Entire to turn into a checkpoint.
-    await key(',')
-    await wait(900)
-    await clickText('$25')
-    await wait(1400)
-    await shot('10-checkpointed')
-    await key('Escape')
-    await wait(600)
-
     // Maximised, the way the window behaves on a real display.
     await js(`window.done.windowAction('maximize')`, 'maximize')
-    await wait(1200)
-    await shot('11-maximised')
+    await wait(1400)
+    await shot('10-maximised')
 
     step('done')
   } catch (err) {
