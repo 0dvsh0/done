@@ -9,6 +9,7 @@ import type {
   SpanRecord,
   SpanStatus
 } from '../shared/types'
+import { envKey } from './env'
 
 const exec = promisify(execFile)
 
@@ -62,7 +63,7 @@ export const tracing = {
       if (!mod.init || !mod.trace) throw new Error('installed, but init()/trace() missing')
       nl = mod
 
-      const apiKey = process.env.NEATLOGS_API_KEY?.trim()
+      const apiKey = envKey('NEATLOGS_API_KEY')
       if (!apiKey) {
         this.status = {
           ...this.status,

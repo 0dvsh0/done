@@ -3,8 +3,9 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { seed, Store } from './agent'
+import { shutdown, Store } from './agent'
 import { entire, tracing } from './integrations'
+import { hydrateEnv } from './env'
 import { economics } from './finance'
 import type { ControlAction, CreateOptions, Limits } from '../shared/types'
 
@@ -280,6 +281,8 @@ function buildMenu(getWindow: () => BrowserWindow | null): void {
 
 ensureDir()
 nativeTheme.themeSource = 'dark'
+hydrateEnv()
+process.env.DONE_REPO_IS_GIT = existsSync(join(app.getAppPath(), '.git')) ? '1' : ''
 
 const store = new Store()
 let windowRef: BrowserWindow | null = null
@@ -299,17 +302,38 @@ function saveSoon(): void {
 /** Clearing the saved list is what "Start fresh" does. */
 function resetData(): void {
   try {
-    if (existsSync(stateFile)) writeFileSync(stateFile, '', 'utf8')
+    writeFileSync(
+      stateFile,
+      JSON.stringify({
+        tasks: [],
+        spans: {},
+        limits: store.limits,
+        ledger: { spent: 0, minutes: 0, done: 0 },
+        allPaused: false
+      }),
+      'utf8'
+    )
   } catch {
     /* ignore */
   }
 }
 
 function boot(): void {
-  // DONE_FRESH=1 starts a clean morning — handy for demos and screenshots.
+  // No fabricated history. The app opens on whatever you actually did last
+  // time, and on an empty list if there isn't any.
   const saved = process.env['DONE_FRESH'] ? null : readJson(stateFile)
-  if (saved) store.restore(readFileSync(stateFile, 'utf8'))
-  else seed(store)
+  if (saved) {
+    store.restore(readFileSync(stateFile, 'utf8'))
+    // Reserialize in case legacy seed tasks were stripped during restore
+    try {
+      writeFileSync(stateFile, store.serialise(), 'utf8')
+    } catch {
+      /* ignore */
+    }
+  } else {
+    resetData()
+  }
+  store.bump()
 
   void tracing.init().then((status) => {
     store.integrations.neatlogs = status
@@ -368,6 +392,18 @@ function registerIpc(): void {
     store.setAllPaused(on)
   })
 
+  ipcMain.handle('task:group', (_e, id: string, group: string | null) => {
+    store.setGroup(id, group)
+  })
+
+  ipcMain.handle('group:rename', (_e, from: string, to: string) => {
+    store.renameGroup(from, to)
+  })
+
+  ipcMain.handle('group:remove', (_e, name: string) => {
+    store.removeGroup(name)
+  })
+
   ipcMain.handle('app:economics', () => economics(store.spans))
 
   ipcMain.handle('task:checkpoint', async (_e, id: string) => {
@@ -407,14 +443,25 @@ function registerIpc(): void {
 
   ipcMain.handle('app:reset', () => {
     resetData()
-    seed(store)
-    saveSoon()
+    for (const t of store.tasks) store.halt(t)
+    store.tasks = []
+    store.spans = {}
+    store.ledger = { spent: 0, minutes: 0, done: 0 }
+    store.allPaused = false
+    store.bump()
     return true
   })
 
   ipcMain.handle('app:open-external', (_e, url: string) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
   })
+
+  ipcMain.handle(
+    'connector:config',
+    (_e, id: import('../shared/types').ConnectorId, config: { apiKey?: string; endpoint?: string }) => {
+      return store.setConnectorConfig(id, config)
+    }
+  )
 
   ipcMain.handle(
     'window:action',
@@ -486,6 +533,8 @@ if (!gotLock) {
     } catch {
       /* ignore */
     }
+    for (const t of store.tasks) store.halt(t)
+    shutdown()
     await tracing.shutdown()
   })
 }

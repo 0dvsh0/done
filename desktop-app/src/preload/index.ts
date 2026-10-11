@@ -18,9 +18,13 @@ const api: DoneApi = {
   clearFinished: () => ipcRenderer.invoke('task:clear-finished'),
   setLimits: (patch: Partial<Limits>) => ipcRenderer.invoke('app:limits', patch),
   setAllPaused: (on: boolean) => ipcRenderer.invoke('app:pause-all', on),
+  setGroup: (id: string, group: string | null) => ipcRenderer.invoke('task:group', id, group),
+  renameGroup: (from: string, to: string) => ipcRenderer.invoke('group:rename', from, to),
+  removeGroup: (name: string) => ipcRenderer.invoke('group:remove', name),
   checkpoint: (id: string) => ipcRenderer.invoke('task:checkpoint', id),
   revealData: () => ipcRenderer.invoke('app:reveal-data'),
   openExternal: (url: string) => ipcRenderer.invoke('app:open-external', url),
+  setConnectorConfig: (id, config) => ipcRenderer.invoke('connector:config', id, config),
   windowAction: (action) => ipcRenderer.invoke('window:action', action)
 }
 

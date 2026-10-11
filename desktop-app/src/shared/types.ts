@@ -122,6 +122,8 @@ export interface Task {
   notes: string[]
   when: string | null
   budget: string | null
+  /** The group this task was filed under, e.g. "Errands". null = ungrouped. */
+  group: string | null
   created: number
   finishedAt: number | null
   nextAt: number
@@ -137,14 +139,24 @@ export interface Task {
   prevState?: TaskState | null
   /** Values filled in as the run progresses, e.g. the option that was chosen. */
   vars?: Record<string, string>
+  /** User-selected connector ('auto' or specific agent) */
+  connector?: ConnectorId
+  /** The connector chosen by our LLM router */
+  routedConnector?: ConnectorId
+  /** Explanation of why our LLM dispatched this task to this connector */
+  routingReason?: string
 }
 
 /* ------------------------------------------------------------- app state */
 
 export interface Limits {
-  /** Dollars the agent may spend without asking. */
+  /**
+   * Dollars one run may spend before the agent stops and asks. Real money:
+   * every model call reports its token count, and cost is computed from the
+   * provider's published rates. At $0 it asks the first time anything costs.
+   */
   spend: number
-  /** If false, messages go out unattended. */
+  /** If false, irreversible tools the user has approved run without asking again. */
   messages: boolean
   /** Hold questions overnight. */
   quiet: boolean
@@ -176,9 +188,54 @@ export interface EntireStatus {
   error: string | null
 }
 
+/** The model doing the thinking, and the classifier screening what it reads. */
+export interface ModelStatus {
+  connected: boolean
+  model: string
+  guard: string
+  error: string | null
+}
+
+/* ------------------------------------------------------------- connectors */
+
+export type ConnectorId =
+  | 'auto'
+  | 'pi'
+  | 'grok'
+  | 'claude'
+  | 'chatgpt'
+  | 'muse'
+  | 'gemini'
+  | 'roma'
+  | 'mcp'
+
+export type ConnectorCategory =
+  | 'code'
+  | 'search'
+  | 'reasoning'
+  | 'creative'
+  | 'protocol'
+  | 'desktop'
+
+export interface ConnectorInfo {
+  id: ConnectorId
+  name: string
+  blurb: string
+  category: ConnectorCategory
+  badge: string
+  icon: string
+  connected: boolean
+  isDefault?: boolean
+  description: string
+  endpoint?: string
+  requiresKey?: string
+}
+
 export interface Integrations {
   neatlogs: NeatlogsStatus
   entire: EntireStatus
+  model: ModelStatus
+  connectors: ConnectorInfo[]
 }
 
 export interface AppState {
@@ -200,6 +257,8 @@ export type ControlAction = 'pause' | 'take' | 'stop' | 'reverse'
 export interface CreateOptions {
   when?: string | null
   budget?: string | null
+  group?: string | null
+  connector?: ConnectorId
 }
 
 export interface DoneApi {
@@ -214,9 +273,13 @@ export interface DoneApi {
   clearFinished(): Promise<void>
   setLimits(patch: Partial<Limits>): Promise<void>
   setAllPaused(on: boolean): Promise<void>
+  setGroup(taskId: string, group: string | null): Promise<void>
+  renameGroup(from: string, to: string): Promise<void>
+  removeGroup(name: string): Promise<void>
   checkpoint(taskId: string): Promise<{ ok: boolean; id: string | null; message: string }>
   revealData(): Promise<void>
   openExternal(url: string): Promise<void>
+  setConnectorConfig(id: ConnectorId, config: { apiKey?: string; endpoint?: string }): Promise<{ ok: boolean; message: string }>
   windowAction(action: 'minimize' | 'maximize' | 'close' | 'fullscreen'): Promise<void>
 }
 
@@ -233,6 +296,8 @@ export interface Economics {
   monthlyGross: number
   fixedMonthly: number
   runwayMonths: number
+  /** How many runs have actually finished — the cost figure is real past three. */
+  measuredRuns: number
   scenarios: {
     name: string
     customers: number
