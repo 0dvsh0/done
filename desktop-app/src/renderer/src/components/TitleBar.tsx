@@ -99,6 +99,9 @@ export function TitleBar({ state }: { state: AppState }): React.JSX.Element {
         <IconButton label="Shortcuts" onClick={() => showSheet('shortcuts')}>
           <I.Keyboard />
         </IconButton>
+        <IconButton label="Pi Agent & capabilities" onClick={() => showSheet('agent')}>
+          <I.Coin />
+        </IconButton>
         <IconButton label="Connections" onClick={() => showSheet('connections')}>
           <I.Trace />
         </IconButton>

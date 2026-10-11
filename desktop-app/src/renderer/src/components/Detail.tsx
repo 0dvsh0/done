@@ -2,10 +2,12 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import type { AppState, Ask, Task } from '../../../shared/types'
 import { clock, cx, money } from '../lib/format'
-import { api, toast, useUI } from '../store'
+import { api, groupNames, toast, useUI } from '../store'
 import { Dot } from './Dot'
+import { GroupPicker } from './GroupPicker'
 import * as I from './Icons'
 import { Button, IconButton, Switch } from './primitives'
+import { ConnectorPill } from './TaskList'
 
 const STATE_WORD: Record<Task['state'], string> = {
   waiting: 'Waiting to start',
@@ -97,10 +99,30 @@ export function Detail({ task, state }: { task: Task; state: AppState }): React.
         <div className="px-6 pt-6 pb-2">
           <div className="flex items-start gap-3">
             <Dot state={task.state} progress={task.progress} size={21} className="mt-[4px]" />
-            <h2 className="voice text-[20px] leading-[1.28] text-fg">{task.title}</h2>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="voice text-[20px] leading-[1.28] text-fg">{task.title}</h2>
+                <ConnectorPill id={task.routedConnector || task.connector} />
+              </div>
+              {task.routingReason && (
+                <p className="mt-1 text-[11px] text-fg-4">
+                  <span className="font-mono text-fg-5">LLM Router:</span> {task.routingReason}
+                </p>
+              )}
+            </div>
           </div>
           <NowLine task={task} />
           <p className="num mt-1.5 text-[11px] text-fg-5">{meta}</p>
+
+          <GroupPicker
+            value={task.group}
+            groups={groupNames(state)}
+            onChange={(next) => {
+              void api.setGroup(task.id, next)
+              if (next) toast(`Filed under ${next}.`, true)
+            }}
+            className="mt-3"
+          />
         </div>
 
         <div className="px-6 pt-4">
@@ -414,7 +436,7 @@ function Constraints({ notes }: { notes: string[] }): React.JSX.Element {
 /* -------------------------------------------------------------- ask card */
 
 const REASON: Record<string, string> = {
-  spend: 'It wants to spend your money',
+  spend: 'It has hit your budget',
   message: 'It wants to speak as you',
   action: 'It wants to act for you'
 }

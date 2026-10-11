@@ -170,6 +170,12 @@ export const Overlap = (p: { className?: string }): React.JSX.Element => (
   </S>
 )
 
+export const Folder = (p: { className?: string }): React.JSX.Element => (
+  <S className={p.className}>
+    <path d="M3.4 6.6a1.4 1.4 0 0 1 1.4-1.4h2.8l1.5 1.8h6.1a1.4 1.4 0 0 1 1.4 1.4v5.6a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4V6.6Z" />
+  </S>
+)
+
 export const Kbd = ({
   children,
   className
@@ -187,3 +193,44 @@ export const Kbd = ({
     {children}
   </kbd>
 )
+
+export const Zap = (p: { className?: string }): React.JSX.Element => (
+  <S className={p.className}>
+    <polygon points="10.8 2.5 3.3 11.2 9.2 11.2 8.3 17.5 15.8 8.8 9.9 8.8 10.8 2.5" />
+  </S>
+)
+
+export const Sparkles = (p: { className?: string }): React.JSX.Element => (
+  <S className={p.className}>
+    <path d="M10 2.5v15M2.5 10h15M4.8 4.8l10.4 10.4M4.8 15.2l10.4-10.4" />
+  </S>
+)
+
+export const Link = (p: { className?: string }): React.JSX.Element => (
+  <S className={p.className}>
+    <path d="M8.3 11.7a3.3 3.3 0 0 0 4.7 0l2.5-2.5a3.3 3.3 0 0 0-4.7-4.7L9.6 5.7" />
+    <path d="M11.7 8.3a3.3 3.3 0 0 0-4.7 0l-2.5 2.5a3.3 3.3 0 0 0 4.7 4.7l1.2-1.2" />
+  </S>
+)
+
+export const Bot = (p: { className?: string }): React.JSX.Element => (
+  <S className={p.className}>
+    <rect x="4" y="6" width="12" height="10" rx="2" />
+    <path d="M10 2.5v3.5M7 11h.01M13 11h.01" />
+  </S>
+)
+
+export const Copy = (p: { className?: string }): React.JSX.Element => (
+  <S className={p.className}>
+    <rect x="7" y="7" width="9" height="9" rx="1.5" />
+    <path d="M4 13V5a1 1 0 0 1 1-1h8" />
+  </S>
+)
+
+export const Terminal = (p: { className?: string }): React.JSX.Element => (
+  <S className={p.className}>
+    <polyline points="5 6 9 10 5 14" />
+    <line x1="11" y1="14" x2="16" y2="14" />
+  </S>
+)
+

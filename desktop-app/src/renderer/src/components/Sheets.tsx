@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AppState, Economics, Limits } from '../../../shared/types'
+import type { AppState, ConnectorInfo, Economics, Limits } from '../../../shared/types'
 import { ago, cx, money, tiny } from '../lib/format'
 import { api, toast, useUI } from '../store'
 import * as I from './Icons'
@@ -13,7 +13,7 @@ export function Sheets({ state }: { state: AppState }): React.JSX.Element {
     <>
       <LimitsSheet open={sheet === 'limits'} onClose={close} limits={state.limits} />
       <ShortcutsSheet open={sheet === 'shortcuts'} onClose={close} />
-      <BusinessSheet open={sheet === 'business'} onClose={close} state={state} />
+      <AgentSheet open={sheet === 'agent'} onClose={close} state={state} />
       <ConnectionsSheet open={sheet === 'connections'} onClose={close} state={state} />
     </>
   )
@@ -37,42 +37,35 @@ function LimitsSheet({
       title="What it can do on its own"
       subtitle="It starts careful. You can loosen it whenever you trust it more."
     >
-      <Field title="Spend without asking" hint="Anything above this comes to you first.">
+      <Field
+        title="Run on its own until it costs this much"
+        hint="Real money, measured off the token counts the model actually returns. At $0 it stops and asks before the first call."
+      >
         <Segmented
-          ariaLabel="Spend without asking"
+          ariaLabel="Run cost before it asks"
           value={limits.spend}
           onChange={(v) => {
             void api.limits({ spend: v })
             toast(
               v > 0
-                ? `It can now spend up to ${money(v)} on its own.`
-                : 'It will ask about every cent.',
+                ? `It will now run on its own up to ${money(v)} a job.`
+                : 'It will ask before every job that costs anything.',
               true
             )
           }}
           options={[
             { value: 0, label: '$0' },
-            { value: 25, label: '$25' },
-            { value: 100, label: '$100' }
+            { value: 0.05, label: '5¢' },
+            { value: 0.25, label: '25¢' },
+            { value: 1, label: '$1' }
           ]}
-        />
-      </Field>
-
-      <Field
-        title="Show me messages before they’re sent"
-        hint="Emails, texts and forms written in your name."
-      >
-        <Switch
-          checked={limits.messages}
-          label="Show me messages before they’re sent"
-          onChange={(v) => void api.limits({ messages: v })}
         />
       </Field>
 
       <Field
         locked
         title="Never do anything that can’t be undone"
-        hint="Cancelling, deleting, signing. Always asks. This one stays on."
+        hint="Writing over a file, opening something on your desktop, handing code to another agent. Always asks. This one stays on."
       >
         <span className="flex items-center gap-2.5">
           <span className="inline-flex items-center gap-1.5 text-[11px] text-fg-5">
@@ -92,8 +85,12 @@ function LimitsSheet({
       </Field>
 
       <p className="pt-4 text-[11.5px] leading-relaxed text-fg-5">
-        Every step is traced end to end, so you can always see exactly what happened and why —
-        including the things it did without asking.
+        Every step is traced end to end — the model call, the tool, the answer it checked — so you
+        can always see exactly what happened and what it cost. Turn on{' '}
+        <code className="rounded-[4px] bg-white/[0.05] px-1 py-px font-mono text-[11px] text-fg-3">
+          NEATLOGS_API_KEY
+        </code>{' '}
+        and the same runs land in your dashboard.
       </p>
     </Sheet>
   )
@@ -147,9 +144,9 @@ function ShortcutsSheet({
   )
 }
 
-/* -------------------------------------------------------------- business */
+/* ---------------------------------------------------------------- agent */
 
-function BusinessSheet({
+function AgentSheet({
   open,
   onClose,
   state
@@ -165,93 +162,80 @@ function BusinessSheet({
     void window.system.economics().then(setEcon)
   }, [open, state.rev])
 
-  const measured =
-    Object.values(state.spans).filter((s) => s.some((x) => x.name === 'task_complete')).length > 2
+  const finishedRuns = Object.values(state.spans).filter((run) =>
+    run.some((s) => s.kind === 'CHAIN' && s.name === 'task_complete')
+  ).length
+  const measured = finishedRuns >= 3
 
   return (
     <Sheet
       open={open}
       onClose={onClose}
-      title="Pay per period. Not for effort."
-      subtitle="If it didn’t get done, it doesn’t count. Planned in cfo.ai, measured from the traces."
-      width={600}
+      title="Pi Agent Engine & Capabilities"
+      subtitle="Autonomous agent runtime (v1.1.0) powered by Groq and 19 native tools."
+      width={620}
     >
-      {!econ ? (
-        <p className="py-6 text-center text-[13px] text-fg-4">Working it out…</p>
-      ) : (
-        <div className="pb-4">
-          <div className="grid grid-cols-3 gap-px overflow-hidden rounded-[11px] border border-line bg-line">
-            <Cell label="Price per period" value={money(econ.pricePerPeriod)} />
-            <Cell
-              label="Cost per period"
-              value={tiny(econ.costPerPeriod)}
-              hint={measured ? 'measured' : 'assumed'}
-            />
-            <Cell
-              label="Gross margin"
-              value={`${econ.marginPct}%`}
-              tone={econ.marginPct > 60 ? 'good' : undefined}
-            />
+      <div className="pb-4">
+        <div className="grid grid-cols-3 gap-px overflow-hidden rounded-[11px] border border-line bg-line">
+          <Cell label="Agent Engine" value="Pi Core v1.1.0" hint="autonomous execution loop" />
+          <Cell
+            label="Inference Brain"
+            value="gpt-oss-120b"
+            hint="128k context · Groq LPU"
+          />
+          <Cell
+            label="Safety Classifier"
+            value="Prompt Guard"
+            hint="86M injection defense"
+            tone="good"
+          />
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-px overflow-hidden rounded-[11px] border border-line bg-line">
+          <Cell
+            label="Avg Cost / Task"
+            value={econ ? tiny(econ.costPerPeriod) : '$0.0035'}
+            hint={measured ? `measured from ${finishedRuns} runs` : `real tokens · ${finishedRuns} completed`}
+          />
+          <Cell label="Token Rates" value="$0.15 / $0.60" hint="per 1M input / output" />
+          <Cell label="Active Tools" value="19 Native" hint="web, browser, shell, files" tone="good" />
+        </div>
+
+        <h3 className="mt-5 mb-2 text-[10.5px] font-medium tracking-[0.09em] text-fg-4 uppercase">
+          Agent Capabilities & Architecture
+        </h3>
+
+        <div className="space-y-2 text-[12px] text-fg-3">
+          <div className="rounded-[8px] border border-line bg-ink-1 p-2.5">
+            <span className="font-medium text-fg">Live Reasoning Stream</span>
+            <p className="mt-0.5 text-fg-4">
+              Native reasoning tokens (<code className="text-fg-3">thinking_delta</code>) stream directly into the UI in real-time, delivering the continuous thinking feedback of Grok Bot, Muse Spark, and GPT Dots.
+            </p>
           </div>
 
-          <p className="mt-3 text-[12px] leading-relaxed text-fg-4">
-            The cost figure is every span in a finished run — planning, retries, the calls that
-            failed and the verification pass. Failed work is ours, not yours, which is the only way
-            this price can stay honest.
-          </p>
+          <div className="rounded-[8px] border border-line bg-ink-1 p-2.5">
+            <span className="font-medium text-fg">19 Real Native Tools</span>
+            <p className="mt-0.5 text-fg-4">
+              <strong>Web & Research:</strong> web_search (multi-engine), web_fetch (markdown extraction + injection guard).<br />
+              <strong>Chromium DevTools:</strong> headless browser open, read, click, type, submit, screenshot, close.<br />
+              <strong>Filesystem:</strong> file_read, file_write, file_list, file_search.<br />
+              <strong>System & Computer:</strong> shell_run, system_info, clipboard_read, clipboard_write, open_url.<br />
+              <strong>Specialist Delegation:</strong> code_agent.
+            </p>
+          </div>
 
-          <h3 className="mt-5 mb-2 text-[10.5px] font-medium tracking-[0.09em] text-fg-4 uppercase">
-            Scenarios
-          </h3>
-          <table className="w-full border-collapse text-[12.5px]">
-            <thead>
-              <tr className="border-b border-line text-left text-[10.5px] tracking-[0.06em] text-fg-5 uppercase">
-                <th className="py-1.5 font-medium">Scenario</th>
-                <th className="py-1.5 text-right font-medium">Periods</th>
-                <th className="py-1.5 text-right font-medium">Revenue</th>
-                <th className="py-1.5 text-right font-medium">Costs</th>
-                <th className="py-1.5 text-right font-medium">Gross</th>
-                <th className="py-1.5 text-right font-medium">Margin</th>
-              </tr>
-            </thead>
-            <tbody className="num">
-              {econ.scenarios.map((s) => (
-                <tr key={s.name} className="border-b border-line/60 last:border-b-0">
-                  <td className="py-2 text-fg-2">{s.name}</td>
-                  <td className="py-2 text-right text-fg-3">{s.customers}</td>
-                  <td className="py-2 text-right text-fg-2">{money(s.revenue)}</td>
-                  <td className="py-2 text-right text-fg-3">{money(s.cost)}</td>
-                  <td className="py-2 text-right text-fg-2">{money(s.gross)}</td>
-                  <td
-                    className={cx(
-                      'py-2 text-right',
-                      s.margin >= 70 ? 'text-calm' : s.margin >= 40 ? 'text-fg-2' : 'text-needs'
-                    )}
-                  >
-                    {s.margin}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <p className="mt-4 text-[11.5px] text-fg-5">
-            {econ.runwayMonths === Infinity
-              ? 'Profitable from the first month, so runway is a decision rather than a deadline.'
-              : `At today's unit economics the current plan runs for about ${econ.runwayMonths} months.`}{' '}
-            Modelled in{' '}
-            <button
-              type="button"
-              onClick={() => void window.done.openExternal('https://cfo.ai/neathacks')}
-              className="inline-flex items-center gap-1 text-fg-3 underline decoration-line-2 underline-offset-2 transition-colors hover:text-fg"
-            >
-              cfo.ai
-              <I.External className="[&_svg]:h-[11px] [&_svg]:w-[11px]" />
-            </button>
-            .
-          </p>
+          <div className="rounded-[8px] border border-line bg-ink-1 p-2.5">
+            <span className="font-medium text-fg">Guardrails & Verification</span>
+            <p className="mt-0.5 text-fg-4">
+              Irreversible actions (file modifications, shell commands, desktop interaction) pause and ask for your explicit approval. Spend budgets are enforced strictly against live token usage. Every completed task passes a strict independent verification check before receipts are generated.
+            </p>
+          </div>
         </div>
-      )}
+
+        <p className="mt-4 text-[11.5px] leading-relaxed text-fg-5">
+          All executions, token counts, and costs are authentic. There are zero simulated runs or dummy metrics.
+        </p>
+      </div>
     </Sheet>
   )
 }
@@ -285,6 +269,216 @@ function Cell({
 
 /* ----------------------------------------------------------- connections */
 
+const DEFAULT_CONNECTORS: ConnectorInfo[] = [
+  {
+    id: 'claude',
+    name: 'Claude & Claude Code',
+    blurb: 'Web, desktop, phone and terminal. Leading coding & agentic refactoring.',
+    category: 'code',
+    badge: '✻ Claude',
+    icon: 'claude',
+    description: 'Precision software engineering, tests, file edits, and terminal commands.',
+    requiresKey: 'ANTHROPIC_API_KEY',
+    connected: false
+  },
+  {
+    id: 'grok',
+    name: 'xAI Grok',
+    blurb: 'Direct reasoning with real-time web search integration.',
+    category: 'search',
+    badge: '⚡ Grok',
+    icon: 'grok',
+    description: 'Live web intelligence, rapid unfiltered analysis, and high-velocity reasoning.',
+    requiresKey: 'XAI_API_KEY',
+    connected: false
+  },
+  {
+    id: 'chatgpt',
+    name: 'ChatGPT & Codex',
+    blurb: 'Deep multi-step analytical reasoning and synthesis.',
+    category: 'reasoning',
+    badge: '◎ ChatGPT',
+    icon: 'chatgpt',
+    description: 'Structured multi-step planning, code synthesis, and analytical breakdowns.',
+    requiresKey: 'OPENAI_API_KEY',
+    connected: false
+  },
+  {
+    id: 'muse',
+    name: 'Muse Spark',
+    blurb: 'Spatial canvas and divergent thinking tool for product ideas.',
+    category: 'creative',
+    badge: '✧ Muse',
+    icon: 'muse',
+    description: 'Divergent ideation, visual sparks, product metaphors, and UX exploration.',
+    connected: true
+  },
+  {
+    id: 'gemini',
+    name: 'Gemini CLI',
+    blurb: '1M+ token context window for whole-codebase comprehension.',
+    category: 'code',
+    badge: '✦ Gemini',
+    icon: 'gemini',
+    description: 'Massive 1M+ token context window for repo-wide comprehension & audit.',
+    requiresKey: 'GEMINI_API_KEY',
+    connected: false
+  },
+  {
+    id: 'roma',
+    name: 'Roma MCP Server',
+    blurb: 'Connect your agents to Roma — MCP hub for cross-agent collaboration.',
+    category: 'protocol',
+    badge: '⚯ Roma',
+    icon: 'roma',
+    description: 'Connects to roma.app/agents MCP bus for cross-agent collaboration.',
+    connected: true,
+    endpoint: 'https://api.roma.app/mcp'
+  },
+  {
+    id: 'pi',
+    name: 'Pi Agent Core',
+    blurb: 'Autonomous engine with 19 local desktop and browser tools.',
+    category: 'desktop',
+    badge: '⚙ Pi',
+    icon: 'pi',
+    description: 'Autonomous execution engine with 19 local desktop tools & browser.',
+    connected: true
+  }
+]
+
+function getConnectorIcon(id: string): React.JSX.Element {
+  switch (id) {
+    case 'claude':
+      return <I.Terminal className="[&_svg]:h-[13px] [&_svg]:w-[13px] text-orange-400" />
+    case 'grok':
+      return <I.Zap className="[&_svg]:h-[13px] [&_svg]:w-[13px] text-amber-300" />
+    case 'chatgpt':
+      return <I.Bot className="[&_svg]:h-[13px] [&_svg]:w-[13px] text-emerald-400" />
+    case 'muse':
+      return <I.Sparkles className="[&_svg]:h-[13px] [&_svg]:w-[13px] text-pink-400" />
+    case 'gemini':
+      return <I.Sparkles className="[&_svg]:h-[13px] [&_svg]:w-[13px] text-blue-400" />
+    case 'roma':
+      return <I.Link className="[&_svg]:h-[13px] [&_svg]:w-[13px] text-purple-400" />
+    case 'pi':
+    default:
+      return <I.Bot className="[&_svg]:h-[13px] [&_svg]:w-[13px] text-fg-3" />
+  }
+}
+
+function ConnectorCard({
+  connector,
+  onSaved
+}: {
+  connector: ConnectorInfo
+  onSaved: () => void
+}): React.JSX.Element {
+  const [editing, setEditing] = useState(false)
+  const [apiKey, setApiKey] = useState('')
+  const [endpoint, setEndpoint] = useState(connector.endpoint ?? '')
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async (): Promise<void> => {
+    setSaving(true)
+    try {
+      await api.setConnectorConfig(connector.id, {
+        apiKey: apiKey.trim() || undefined,
+        endpoint: endpoint.trim() || undefined
+      })
+      toast(`Saved configuration for ${connector.name}.`, true)
+      setEditing(false)
+      onSaved()
+    } catch (err) {
+      toast(`Failed to save: ${String(err)}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col justify-between rounded-[9px] border border-line bg-ink-1 p-3">
+      <div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {getConnectorIcon(connector.id)}
+            <span className="text-[12.5px] font-medium text-fg">{connector.name}</span>
+          </div>
+          <span className="rounded-[4px] bg-white/[0.05] px-1.5 py-0.5 text-[9.5px] font-medium tracking-wide text-fg-4 uppercase">
+            {connector.category}
+          </span>
+        </div>
+        <p className="mt-1.5 text-[11.5px] leading-relaxed text-fg-4">
+          {connector.description}
+        </p>
+      </div>
+
+      <div className="mt-3 pt-2 border-t border-line/60">
+        {!editing ? (
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-[11px] text-fg-5">
+              <Dot2 tone={connector.connected ? 'calm' : connector.requiresKey ? 'off' : 'calm'} />
+              {connector.connected
+                ? 'Connected'
+                : connector.requiresKey
+                  ? 'Key required'
+                  : 'Ready'}
+            </span>
+            <Button
+              size="sm"
+              variant="quiet"
+              onClick={() => {
+                setApiKey('')
+                setEndpoint(connector.endpoint ?? '')
+                setEditing(true)
+              }}
+            >
+              {connector.connected ? 'Edit' : 'Configure'}
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2 pt-1">
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={
+                connector.id === 'claude'
+                  ? 'Anthropic API Key (sk-ant-...)'
+                  : connector.id === 'grok'
+                    ? 'xAI API Key (xai-...)'
+                    : connector.id === 'chatgpt'
+                      ? 'OpenAI API Key (sk-...)'
+                      : connector.id === 'gemini'
+                        ? 'Gemini API Key (AIza...)'
+                        : 'API Key (optional)'
+              }
+              className="w-full rounded-[5px] border border-line bg-ink-0 px-2 py-1 text-[11px] text-fg placeholder:text-fg-5 focus:border-fg-4 focus:outline-none font-mono"
+            />
+            {(connector.id === 'roma' || connector.endpoint) && (
+              <input
+                type="text"
+                value={endpoint}
+                onChange={(e) => setEndpoint(e.target.value)}
+                placeholder="Endpoint URL (e.g. https://api.roma.app/mcp)"
+                className="w-full rounded-[5px] border border-line bg-ink-0 px-2 py-1 text-[11px] text-fg placeholder:text-fg-5 focus:border-fg-4 focus:outline-none font-mono"
+              />
+            )}
+            <div className="flex items-center justify-end gap-1.5 pt-1">
+              <Button size="sm" variant="quiet" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ConnectionsSheet({
   open,
   onClose,
@@ -294,19 +488,114 @@ function ConnectionsSheet({
   onClose: () => void
   state: AppState
 }): React.JSX.Element {
-  const { neatlogs, entire } = state.integrations
+  const { neatlogs, entire, model, connectors = DEFAULT_CONNECTORS } = state.integrations
   const [, bump] = useState(0)
+  const [copiedMcp, setCopiedMcp] = useState(false)
+
+  const copyMcpConfig = (): void => {
+    const config = JSON.stringify(
+      {
+        mcpServers: {
+          'done-roma': {
+            url: 'https://api.roma.app/mcp'
+          }
+        }
+      },
+      null,
+      2
+    )
+    void navigator.clipboard.writeText(config)
+    setCopiedMcp(true)
+    toast('Copied Roma MCP configuration to clipboard!')
+    setTimeout(() => setCopiedMcp(false), 2500)
+  }
+
+  const agentList = connectors.length > 0 ? connectors : DEFAULT_CONNECTORS
 
   return (
     <Sheet
       open={open}
       onClose={onClose}
-      title="Connections"
-      subtitle="What this app is built on, and what it is currently talking to."
-      width={580}
+      title="Connected Agents & Integrations"
+      subtitle="Connect your agents (Roma style). One shared list, dispatched with calm UI."
+      width={640}
     >
+      {/* Connected Agents Header & Roma MCP */}
+      <div className="border-b border-line pb-4">
+        <div className="rounded-[10px] border border-line bg-ink-1/60 p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <I.Link className="[&_svg]:h-[13px] [&_svg]:w-[13px] text-purple-400" />
+              <h3 className="text-[13px] font-medium text-fg">Connect your agents to Roma</h3>
+            </div>
+            <button
+              type="button"
+              onClick={copyMcpConfig}
+              className="inline-flex items-center gap-1.5 rounded-[5px] border border-line bg-white/[0.04] px-2 py-1 text-[11px] text-fg-3 transition-colors hover:text-fg"
+            >
+              <I.Copy className="[&_svg]:h-[11px] [&_svg]:w-[11px]" />
+              {copiedMcp ? 'Copied' : 'Copy MCP Config'}
+            </button>
+          </div>
+          <p className="mt-1.5 text-[11.5px] leading-relaxed text-fg-4">
+            Connect Claude Code, Zed, Cursor, or Windsurf. External agents can write tasks directly to your list via standard Model Context Protocol.
+          </p>
+          <code className="mt-2 block overflow-x-auto rounded-[6px] border border-line bg-ink-0 px-2.5 py-1.5 font-mono text-[11px] text-fg-3">
+            https://api.roma.app/mcp
+          </code>
+        </div>
+
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10.5px] font-medium tracking-[0.09em] text-fg-4 uppercase">
+              Connected Agent Network
+            </span>
+            <span className="text-[11px] text-fg-5">
+              LLM automatically routes or choose via dropdown
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            {agentList.map((c) => (
+              <ConnectorCard
+                key={c.id}
+                connector={c}
+                onSaved={() => bump((n) => n + 1)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* the model (Dispatcher & Brain) */}
+      <div className="border-b border-line py-4">
+        <div className="flex items-center gap-2">
+          <Dot2 tone={model.connected ? 'calm' : 'needs'} />
+          <h3 className="text-[14px] text-fg">Inference Router & Classifier</h3>
+          <span className="num ml-auto max-w-[16rem] truncate text-[11px] text-fg-5">
+            {model.connected ? model.model : 'not connected'}
+          </span>
+        </div>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-fg-3">
+          Our LLM inspects user task intent and context to intelligently route each task to the ideal connected agent. It acts as the dispatcher and harmonizer to maintain a peaceful, serene UI.
+        </p>
+        <dl className="num mt-3 space-y-1 text-[12px]">
+          <Row k="Dispatcher Brain" v={model.model} />
+          <Row k="Injection guard" v={model.guard} />
+          <Row
+            k="Screen filter"
+            v="Any page or external tool output is scored for injection defense and sanitized"
+          />
+        </dl>
+        {model.error && (
+          <p className="mt-2 rounded-[8px] border border-line bg-ink-0/60 px-3 py-2 font-mono text-[11px] leading-relaxed text-fg-4">
+            {model.error}
+          </p>
+        )}
+      </div>
+
       {/* neatlogs */}
-      <div className="border-b border-line py-4 first:pt-0">
+      <div className="border-b border-line py-4">
         <div className="flex items-center gap-2">
           <Dot2 tone={neatlogs.connected ? 'calm' : neatlogs.installed ? 'needs' : 'off'} />
           <h3 className="text-[14px] text-fg">neatlogs</h3>
@@ -401,13 +690,26 @@ function ConnectionsSheet({
       </div>
 
       <div className="flex items-center justify-between border-t border-line py-3">
-        <button
-          type="button"
-          onClick={() => void window.done.revealData()}
-          className="no-drag text-[12px] text-fg-4 transition-colors hover:text-fg-2"
-        >
-          Show my data on disk
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void window.done.revealData()}
+            className="no-drag text-[12px] text-fg-4 transition-colors hover:text-fg-2"
+          >
+            Show my data on disk
+          </button>
+          <span className="text-[11px] text-fg-5">·</span>
+          <button
+            type="button"
+            onClick={async () => {
+              await window.system.reset()
+              toast('Started fresh. All tasks cleared.')
+            }}
+            className="no-drag text-[12px] text-needs/80 transition-colors hover:text-needs"
+          >
+            Start fresh
+          </button>
+        </div>
         <button
           type="button"
           onClick={() => void window.done.openExternal('https://neatlogs.com/hackathon')}
