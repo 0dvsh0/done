@@ -101,12 +101,12 @@ function Palette({ state }: { state: AppState }): React.JSX.Element {
         }
       },
       {
-        id: 'business',
-        label: 'Pay per period',
-        hint: 'the economics, in cfo.ai',
+        id: 'agent',
+        label: 'Pi Agent & Capabilities',
+        hint: 'v1.1.0 · models · 19 tools',
         icon: <I.Coin className="[&_svg]:h-[14px] [&_svg]:w-[14px]" />,
         run: () => {
-          useUI.getState().showSheet('business')
+          useUI.getState().showSheet('agent')
           close()
         }
       },
@@ -147,6 +147,16 @@ function Palette({ state }: { state: AppState }): React.JSX.Element {
         run: () => {
           void api.clearFinished()
           close()
+        }
+      },
+      {
+        id: 'reset',
+        label: 'Start fresh (clear all tasks)',
+        icon: <I.Stop className="[&_svg]:h-[14px] [&_svg]:w-[14px]" />,
+        run: () => {
+          void window.system.reset()
+          close()
+          toast('Started fresh. All tasks cleared.')
         }
       }
     ]
