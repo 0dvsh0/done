@@ -2,8 +2,9 @@ import { AnimatePresence, motion } from 'motion/react'
 import type { AppState } from '../../../shared/types'
 import { cx } from '../lib/format'
 import { api, useUI } from '../store'
+import { useTheme } from '../theme'
 import { IconButton } from './primitives'
-import { Kbd } from './Icons'
+import { Keys } from './Icons'
 import * as I from './Icons'
 
 /**
@@ -34,18 +35,19 @@ export function TitleBar({ state }: { state: AppState }): React.JSX.Element {
       <div className={cx('flex items-center', isMac ? 'pl-[78px]' : 'pl-4')}>
         <div className="flex items-baseline text-[15px] font-medium tracking-[-0.045em] text-fg">
           done
-          <span className="relative ml-[0.09em] inline-block h-[4.5px] w-[4.5px]">
+          {/* The period. Its colour comes from a class rather than from an
+              animated `backgroundColor`, because a var() cannot be interpolated
+              — the animation resolved to nothing and the mark simply was not
+              there in light mode. A class is set once and cannot go missing. */}
+          <span className="relative ml-[0.16em] inline-block h-[5px] w-[5px]">
             <motion.span
-              className="absolute inset-0 rounded-full"
+              className={cx(
+                'absolute inset-0 rounded-full',
+                tone === 'needs' ? 'bg-needs' : 'bg-fg'
+              )}
               animate={{
-                backgroundColor:
-                  tone === 'needs'
-                    ? 'var(--color-needs)'
-                    : tone === 'working'
-                      ? 'var(--color-fg)'
-                      : 'var(--color-fg)',
                 scale: tone === 'needs' ? [1, 1.35, 1] : tone === 'working' ? [1, 0.6, 1] : 1,
-                opacity: tone === 'idle' ? 0.85 : 1
+                opacity: tone === 'idle' ? 0.9 : 1
               }}
               transition={
                 tone === 'idle'
@@ -56,7 +58,7 @@ export function TitleBar({ state }: { state: AppState }): React.JSX.Element {
           </span>
         </div>
 
-        <div className="ml-3 h-3.5 w-px bg-line" />
+        <div className="ml-3.5 h-3.5 w-px bg-line" />
 
         <button
           type="button"
@@ -64,8 +66,8 @@ export function TitleBar({ state }: { state: AppState }): React.JSX.Element {
           title={allPaused ? 'Resume everything' : 'Pause everything'}
           className={cx(
             'no-drag ml-3 inline-flex items-center gap-1.5 rounded-[6px] px-1.5 py-1 text-[12px]',
-            'transition-colors hover:bg-white/[0.05]',
-            allPaused ? 'text-needs' : 'text-fg-3 hover:text-fg-2'
+            'transition-colors hover:bg-veil',
+            allPaused ? 'text-needs' : 'text-fg-3 hover:text-fg'
           )}
         >
           {allPaused ? (
@@ -83,14 +85,14 @@ export function TitleBar({ state }: { state: AppState }): React.JSX.Element {
           type="button"
           onClick={() => togglePalette()}
           className={cx(
-            'no-drag mr-1 inline-flex h-[26px] items-center gap-2 rounded-[7px] border border-line',
-            'bg-white/[0.02] px-2.5 text-[12px] text-fg-4 transition-colors',
-            'hover:border-line-2 hover:bg-white/[0.05] hover:text-fg-3'
+            'no-drag mr-1.5 inline-flex h-[26px] items-center gap-2 rounded-[7px] border border-line',
+            'bg-mark px-2.5 text-[12px] text-fg-3 transition-colors',
+            'hover:border-line-2 hover:bg-veil hover:text-fg-2'
           )}
         >
           <I.Search className="[&_svg]:h-[13px] [&_svg]:w-[13px]" />
           <span>Search</span>
-          <Kbd className="ml-1">⌘K</Kbd>
+          <Keys keys={['⌘', 'K']} className="ml-1.5" />
         </button>
 
         <IconButton label="What it can do on its own" onClick={() => showSheet('limits')}>
@@ -105,10 +107,51 @@ export function TitleBar({ state }: { state: AppState }): React.JSX.Element {
         <IconButton label="Connections" onClick={() => showSheet('connections')}>
           <I.Trace />
         </IconButton>
+        <ThemeSwitch />
       </div>
 
       {!isMac && <WindowControls />}
     </header>
+  )
+}
+
+/* ------------------------------------------------------------ mode switch */
+
+/**
+ * Light and dark, one click apart.
+ *
+ * It shows the mode you would move *to* rather than the one you are in, which
+ * is what every well-made switch in the world does: the glyph on the button is
+ * the answer to "what happens if I press this". While the choice is still
+ * `system` it says so, and offers the way back.
+ */
+function ThemeSwitch(): React.JSX.Element {
+  const theme = useTheme((s) => s.theme)
+  const resolved = useTheme((s) => s.resolved)
+  const choose = useTheme((s) => s.choose)
+
+  const goingDark = resolved === 'light'
+  const label =
+    theme === 'system'
+      ? `Appearance: following your system (${resolved}). Switch to ${goingDark ? 'dark' : 'light'}.`
+      : `Appearance: ${resolved}. Switch to ${goingDark ? 'dark' : 'light'}.`
+
+  return (
+    <span className="relative ml-0.5 inline-flex">
+      <IconButton
+        label={label}
+        onClick={() => choose(goingDark ? 'dark' : 'light')}
+        className={theme === 'system' ? 'italic' : undefined}
+      >
+        {goingDark ? <I.Moon /> : <I.Sun />}
+      </IconButton>
+      {theme === 'system' && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute right-0.5 bottom-0.5 h-[3px] w-[3px] rounded-full bg-fg-4"
+        />
+      )}
+    </span>
   )
 }
 
@@ -156,8 +199,8 @@ function WCButton({
       title={label}
       onClick={onClick}
       className={cx(
-        'no-drag group flex w-[46px] items-center justify-center text-fg-4',
-        'transition-colors duration-100 hover:bg-white/[0.06] hover:text-fg-2',
+        'no-drag group flex w-[46px] items-center justify-center text-fg-3',
+        'transition-colors duration-100 hover:bg-veil hover:text-fg',
         danger && 'hover:bg-[#c8382f] hover:text-white'
       )}
     >
@@ -183,7 +226,7 @@ export function Toast(): React.JSX.Element {
           transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
           className="pointer-events-none fixed inset-x-0 bottom-9 z-40 flex justify-center"
         >
-          <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-line-2 bg-ink-2 py-1.5 pr-1.5 pl-4 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.9)]">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-line-2 bg-ink-2 py-1.5 pr-1.5 pl-4 shadow-lift">
             <span className="text-[13px] text-fg-2">{toastState.text}</span>
             {toastState.undo && (
               <button
@@ -192,7 +235,7 @@ export function Toast(): React.JSX.Element {
                   void api.undo()
                   clear()
                 }}
-                className="no-drag inline-flex h-[24px] items-center gap-1.5 rounded-full bg-white/[0.07] px-2.5 text-[12px] text-fg transition-colors hover:bg-white/[0.12]"
+                className="no-drag inline-flex h-[24px] items-center gap-1.5 rounded-full bg-veil-2 px-2.5 text-[12px] text-fg transition-colors hover:bg-line-2"
               >
                 <I.Undo className="[&_svg]:h-[13px] [&_svg]:w-[13px]" />
                 Undo

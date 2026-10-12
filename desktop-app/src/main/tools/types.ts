@@ -19,7 +19,7 @@ export interface ToolResult {
   /** The full payload handed to the model for its next decision. */
   data: unknown
   /** Present when the content was screened by the injection classifier. */
-  guard?: { safe: boolean; score: number; reason: string }
+  guard?: { safe: boolean; score: number; reason: string; suspect?: boolean }
 }
 
 export interface ToolContext {

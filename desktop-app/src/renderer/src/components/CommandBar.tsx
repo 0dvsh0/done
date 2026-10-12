@@ -3,9 +3,10 @@ import { useMemo, useState } from 'react'
 import type { AppState } from '../../../shared/types'
 import { cx } from '../lib/format'
 import { api, toast, useUI } from '../store'
+import { useTheme } from '../theme'
 import { Dot } from './Dot'
 import * as I from './Icons'
-import { Kbd } from './Icons'
+import { Keys, Kbd } from './Icons'
 
 interface Command {
   id: string
@@ -37,6 +38,9 @@ function Palette({ state }: { state: AppState }): React.JSX.Element {
   const openId = useUI((s) => s.openId)
   const openTask = useUI((s) => s.openTask)
   const showTrace = useUI((s) => s.showTrace)
+  const theme = useTheme((s) => s.theme)
+  const resolved = useTheme((s) => s.resolved)
+  const choose = useTheme((s) => s.choose)
   const [q, setQ] = useState('')
   const [cursor, setCursor] = useState(0)
 
@@ -66,6 +70,33 @@ function Palette({ state }: { state: AppState }): React.JSX.Element {
         run: () => {
           void api.pauseAll(!state.allPaused)
           close()
+        }
+      },
+      {
+        /* The mode sits high in the list because it is one of the two things
+           people reach for out of habit in every other app. It says which
+           mode is on and which you would move to — and the entry below hands
+           the choice back to the system, because a setting that can trap you
+           in a decision is not a setting. */
+        id: 'appearance',
+        label: `Appearance — ${resolved === 'dark' ? 'Dark' : 'Light'}`,
+        hint: theme === 'system' ? 'following your system' : undefined,
+        keys: ['⇧', 'L'],
+        icon:
+          resolved === 'dark' ? (
+            <I.Moon className="[&_svg]:h-[14px] [&_svg]:w-[14px]" />
+          ) : (
+            <I.Sun className="[&_svg]:h-[14px] [&_svg]:w-[14px]" />
+          ),
+        run: () => {
+          const was = theme
+          choose(resolved === 'dark' ? 'light' : 'dark')
+          close()
+          toast(
+            was === 'system'
+              ? `Now set to ${resolved === 'dark' ? 'dark' : 'light'} — no longer following your system.`
+              : `Now ${resolved === 'dark' ? 'light' : 'dark'}.`
+          )
         }
       },
       {
@@ -131,6 +162,17 @@ function Palette({ state }: { state: AppState }): React.JSX.Element {
         }
       },
       {
+        id: 'appearance-system',
+        label: 'Appearance — follow my system',
+        hint: theme === 'system' ? 'on' : undefined,
+        icon: <I.Undo className="[&_svg]:h-[14px] [&_svg]:w-[14px]" />,
+        run: () => {
+          choose('system')
+          close()
+          toast('Appearance follows your system again.')
+        }
+      },
+      {
         id: 'undo',
         label: 'Undo the last thing',
         keys: ['⌘', 'Z'],
@@ -161,7 +203,7 @@ function Palette({ state }: { state: AppState }): React.JSX.Element {
       }
     ]
     return list
-  }, [state.allPaused, under, openId])
+  }, [state.allPaused, under, openId, theme, resolved, choose])
 
   const tasks = useMemo(
     () =>
@@ -199,16 +241,16 @@ function Palette({ state }: { state: AppState }): React.JSX.Element {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.15 }}
     >
-      <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px]" onClick={close} />
+      <div className="absolute inset-0 bg-scrim backdrop-blur-[3px]" onClick={close} />
       <motion.div
         initial={{ opacity: 0, y: -10, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: -8, scale: 0.99 }}
         transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-[600px] overflow-hidden rounded-[14px] border border-line-2 bg-ink-1 shadow-[0_28px_90px_-12px_rgba(0,0,0,0.85)]"
+        className="relative w-[600px] overflow-hidden rounded-[14px] border border-line-2 bg-ink-1 shadow-float"
       >
         <div className="flex items-center gap-2.5 border-b border-line px-4 py-3">
-          <I.Search className="text-fg-4 [&_svg]:h-[15px] [&_svg]:w-[15px]" />
+          <I.Search className="text-fg-3 [&_svg]:h-[15px] [&_svg]:w-[15px]" />
           <input
             autoFocus
             value={q}
@@ -232,14 +274,14 @@ function Palette({ state }: { state: AppState }): React.JSX.Element {
               }
             }}
             placeholder="Search your list, or type a command…"
-            className="min-w-0 flex-1 bg-transparent text-[14px] placeholder:text-fg-5"
+            className="min-w-0 flex-1 bg-transparent text-[14px] "
           />
           <Kbd>esc</Kbd>
         </div>
 
         <div className="max-h-[46vh] overflow-y-auto py-1.5">
           {matches.length === 0 && (
-            <p className="px-4 py-6 text-center text-[13px] text-fg-5">Nothing matches “{q}”.</p>
+            <p className="px-4 py-6 text-center text-[13px] text-fg-4">Nothing matches “{q}”.</p>
           )}
           {matches.map((c, i) => (
             <button
@@ -249,21 +291,15 @@ function Palette({ state }: { state: AppState }): React.JSX.Element {
               onClick={c.run}
               className={cx(
                 'flex w-full items-center gap-3 px-4 py-[7px] text-left transition-colors',
-                i === active ? 'bg-white/[0.06]' : ''
+                i === active ? 'bg-veil-2' : ''
               )}
             >
               <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center text-fg-3">
                 {c.icon}
               </span>
               <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{c.label}</span>
-              {c.hint && <span className="shrink-0 text-[11px] text-needs">{c.hint}</span>}
-              {c.keys && (
-                <span className="flex shrink-0 gap-1">
-                  {c.keys.map((k) => (
-                    <Kbd key={k}>{k}</Kbd>
-                  ))}
-                </span>
-              )}
+              {c.hint && <span className="shrink-0 text-[11px] text-fg-3">{c.hint}</span>}
+              {c.keys && <Keys keys={c.keys} className="ml-3" />}
             </button>
           ))}
         </div>

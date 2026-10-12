@@ -1,13 +1,19 @@
 import type { AgentConnector, ConnectorContext, ConnectorResult } from './types'
 import type { ConnectorInfo } from '../../shared/types'
-import { createPiModels, getPiModel } from '../pi'
+import { runAgentLoop, type Persona } from './loop'
 
+/**
+ * Muse — creative direction.
+ *
+ * Ideas are cheap and unimplemented ideas are worthless, so this persona is
+ * explicit that it must land the concept somewhere real before it stops.
+ */
 export class MuseConnector implements AgentConnector {
   id = 'muse' as const
-  name = 'Muse Spark'
-  blurb = 'Paste the prompt; Muse does the rest. Creative ideation, design sparks, and product concepts.'
+  name = 'Muse'
+  blurb = 'Divergent ideas, then it lands the one you pick in a real file.'
   category = 'creative' as const
-  badge = '✦ Muse'
+  badge = 'Muse'
   icon = 'muse'
 
   private customKey: string | null = null
@@ -19,11 +25,7 @@ export class MuseConnector implements AgentConnector {
   }
 
   isConfigured(): boolean {
-    return Boolean(
-      this.customKey ||
-      process.env['MUSE_API_KEY'] ||
-      process.env['LLM_API_KEY']
-    )
+    return Boolean(this.customKey || process.env['MUSE_API_KEY'] || process.env['LLM_API_KEY'])
   }
 
   getInfo(): ConnectorInfo {
@@ -36,85 +38,27 @@ export class MuseConnector implements AgentConnector {
       icon: this.icon,
       connected: this.isConfigured(),
       description:
-        'Muse Spark is a design and ideation engine. It excels at divergent brainstorming, rapid concept generation, product naming, and visual prompts.',
+        'Ideation with somewhere to put the result. Generates genuinely distinct options, then writes the one you choose to a real file instead of leaving it in the chat.',
       endpoint: this.customEndpoint || 'https://muse.app/api',
       requiresKey: 'MUSE_API_KEY'
     }
   }
 
-  async execute(prompt: string, ctx: ConnectorContext): Promise<ConnectorResult> {
-    ctx.setTaskLine('✦ [Muse Spark] Sparking creative ideation...')
-    ctx.setTaskProgress(0.2)
-
-    const models = createPiModels()
-    const model = getPiModel()
-
-    let accumulated = ''
-    try {
-      const responseStream = models.streamSimple(
-        model,
-        {
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: [
-                    `You are Muse Spark, a creative AI agent integrated into Done.`,
-                    `Specialty: Unconventional brainstorming, memorable product naming, aesthetic UX concepts, and punchy design direction.`,
-                    '',
-                    `Creative Goal: ${prompt}`,
-                    '',
-                    `Provide 3 to 5 striking, distinct concepts with titles, taglines, and rationale. Make each concept bold, original, and actionable.`
-                  ].join('\n')
-                }
-              ],
-              timestamp: Date.now()
-            }
-          ]
-        },
-        { maxRetries: 3 }
-      )
-
-      for await (const chunk of responseStream) {
-        if (chunk.type === 'text_delta') {
-          accumulated += chunk.delta
-          const lastLine = accumulated.trim().split('\n').filter(Boolean).pop() ?? ''
-          if (lastLine) {
-            ctx.setTaskLine(`✦ [Muse Spark] ${lastLine.slice(0, 110)}`)
-          }
-        }
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      throw new Error(`Muse Spark execution error: ${msg}`)
+  execute(prompt: string, ctx: ConnectorContext): Promise<ConnectorResult> {
+    const persona: Persona = {
+      opening: 'Thinking of something good.',
+      identity: [
+        'You are Muse, the creative side of this app.',
+        'You are original, specific, and allergic to generic.'
+      ],
+      craft: [
+        'Offer genuinely different directions, not variations on one idea.',
+        'No "in today\'s fast-paced world". Say the specific thing.',
+        'If the work is to make something rather than describe it, make it — write the file.'
+      ],
+      maxTurns: 10,
+      engine: 'pi'
     }
-
-    ctx.setTaskProgress(0.95)
-    ctx.pushHistory({
-      tool: 'muse_spark',
-      ok: true,
-      summary: `Muse Spark generated creative concepts: ${prompt.slice(0, 80)}`,
-      detail: accumulated,
-      args: 'spark_mode="divergent"'
-    })
-
-    const summaryLine = accumulated.split('\n').filter(Boolean)[0] || 'Muse Spark concepts generated.'
-
-    return {
-      ok: true,
-      summary: summaryLine.slice(0, 160),
-      detail: accumulated,
-      receiptDraft: {
-        lines: [
-          ['Connected Agent', 'Muse Spark'],
-          ['Output', summaryLine.slice(0, 80)],
-          ['Style', 'Divergent creative concepts']
-        ],
-        proof: ['muse.app/spark', 'creative synthesis'],
-        undo: null
-      }
-    }
+    return runAgentLoop(persona, ctx, prompt)
   }
 }

@@ -32,8 +32,16 @@ export async function captureSequence(getWindow: () => BrowserWindow | null): Pr
     process.stdout.write('[preload] error ' + p + ' ' + String(err) + '\n')
   })
 
-  /** Never let one stuck call take the whole run down. */
-  const js = async (code: string, label: string): Promise<unknown> => {
+  /**
+   * Never let one stuck call take the whole run down.
+   *
+   * Returns whatever the page evaluates to, which varies per probe — a
+   * boolean from a poll, an object from a report. `unknown` would need a cast
+   * at every call site for no safety, since the code is a string this file
+   * wrote.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const js = async (code: string, label: string): Promise<any> => {
     const w = getWindow()
     if (!w) return null
     try {
@@ -63,6 +71,32 @@ export async function captureSequence(getWindow: () => BrowserWindow | null): Pr
         const el = els[${index}]; if (el) { el.dispatchEvent(new MouseEvent('click', {bubbles:true})); return true } return false })()`,
       `click ${selector}`
     )
+
+  /**
+   * Clicks until the thing being screenshotted is actually on screen.
+   *
+   * A click fired into a list that is still re-rendering lands on nothing, and
+   * the shot that follows captures the previous state — which looks exactly
+   * like a broken UI. Half of this sequence used to be capturable only on runs
+   * where the timing happened to fall right, which is no better than not
+   * capturing it at all.
+   */
+  const clickUntil = async (
+    selector: string,
+    expect: string,
+    label: string,
+    tries = 6
+  ): Promise<boolean> => {
+    for (let i = 0; i < tries; i++) {
+      await click(selector)
+      await wait(700)
+      if ((await js(`!!document.querySelector(${JSON.stringify(expect)})`, label)) === true) {
+        return true
+      }
+    }
+    step(`${label}: never appeared after ${tries} attempts`)
+    return false
+  }
 
   const clickText = (prefix: string): Promise<unknown> =>
     js(
@@ -100,14 +134,51 @@ export async function captureSequence(getWindow: () => BrowserWindow | null): Pr
       'closeTop'
     )
 
+  /**
+   * Waits for the task to stop moving, and says which way it ended.
+   *
+   * The sequence used to sleep a fixed nine seconds and screenshot whatever
+   * happened to be on screen. That is fine for a picture and useless as
+   * evidence — it cannot tell "working" from "stuck", and a task that had
+   * dead-ended in "needs you" looked exactly like a healthy one mid-run. That
+   * is the failure this harness exists to catch, and it was blind to it.
+   */
+  const settle = async (timeoutMs: number): Promise<void> => {
+    const settled = async (): Promise<boolean> =>
+      (await js(
+        `(async () => { const t = (await window.done.getState()).tasks[0];
+             if (!t) return true;
+             return ['done','stopped','needs','snag'].includes(t.state) })()`,
+        'poll'
+      )) === true
+
+    if (await settled()) return
+
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline && !(await settled())) await wait(1500)
+
+    const report = (await js(
+      `(async () => { const t = (await window.done.getState()).tasks[0];
+         if (!t) return null;
+         return { state: t.state, line: t.line, connector: t.routedConnector,
+                  steps: t.story.length, receipt: !!t.receipt } })()`,
+      'report'
+    )) as Record<string, unknown> | null
+
+    if (!report) return
+    step(`task ${report.state} on ${report.connector} after ${report.steps} steps`)
+    step(`line: ${report.line}`)
+    step(`receipt: ${report.receipt ? 'yes' : 'no'}`)
+  }
+
   try {
     getWindow()?.focus()
     await wait(2500)
     await shot('01-empty')
 
-    // A real goal, run by the real agent. It does not have to finish inside the
-    // capture window — these are screenshots of the app working, not a
-    // choreographed sequence.
+    // A real goal, run by the real agent, through the real routing and the real
+    // tools. It has to reach a terminal state before anything is screenshotted,
+    // or the pictures show a spinner rather than a result.
     await type('[data-composer]', 'What is the current Node.js LTS version? Search the web.')
     await wait(500)
     await shot('02-composed')
@@ -117,19 +188,21 @@ export async function captureSequence(getWindow: () => BrowserWindow | null): Pr
         if (f) { f.requestSubmit ? f.requestSubmit() : f.dispatchEvent(new Event('submit', {bubbles:true})); return true } return false })()`,
       'submit'
     )
-    await wait(9000)
+    await wait(1500)
     await shot('03-working')
+    await settle(Number(process.env.DONE_SETTLE_MS ?? 150_000))
+    await shot('03b-settled')
 
-    await click('[data-row]')
-    await wait(1400)
+    await clickUntil('[data-row]', 'aside', 'open detail')
+    await wait(900)
     await shot('04-detail')
 
     await clickText('Show what')
     await wait(900)
     await shot('05-underneath')
 
-    await clickText('Trace')
-    await wait(1200)
+    await clickUntil('footer button', '[role="dialog"]', 'open trace')
+    await wait(900)
     await shot('06-trace')
     await closeTop()
     await wait(700)

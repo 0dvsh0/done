@@ -74,13 +74,13 @@ export function TraceSheet({
       }
     >
       <div className="pb-4">
-        <div className="mb-3 flex items-center gap-2 rounded-[9px] border border-line bg-ink-0/60 px-3 py-2">
-          <span className="text-[11px] text-fg-4">workflow</span>
+        <div className="mb-3 flex items-center gap-2 rounded-[9px] border border-line bg-mark px-3 py-2">
+          <span className="text-[11px] text-fg-3">workflow</span>
           <span className="truncate font-mono text-[11.5px] text-fg-2">{task.title}</span>
           <span
             className={cx(
               'num ml-auto shrink-0 text-[11px]',
-              connected ? 'text-calm' : 'text-fg-5'
+              connected ? 'text-calm' : 'text-fg-4'
             )}
           >
             {connected ? 'exported' : 'local only'}
@@ -88,7 +88,7 @@ export function TraceSheet({
         </div>
 
         {spans.length === 0 ? (
-          <p className="py-8 text-center text-[13px] text-fg-4">
+          <p className="py-8 text-center text-[13px] text-fg-3">
             This task hasn’t run a step in this session yet.
           </p>
         ) : (
@@ -100,7 +100,7 @@ export function TraceSheet({
         )}
 
         {carried > 0 && (
-          <p className="mt-3 border-t border-line pt-3 text-[11.5px] leading-relaxed text-fg-5">
+          <p className="mt-3 border-t border-line pt-3 text-[11.5px] leading-relaxed text-fg-3">
             {carried} earlier {carried === 1 ? 'step was' : 'steps were'} carried over from your
             last session, so {carried === 1 ? 'it is' : 'they are'} in the story but not in this
             trace.
@@ -117,7 +117,7 @@ function SpanRow({ span, max }: { span: SpanRecord; max: number }): React.JSX.El
 
   return (
     <li
-      className="group grid grid-cols-[52px_1fr_auto] items-start gap-x-3 rounded-[7px] px-2 py-[7px] transition-colors hover:bg-white/[0.03]"
+      className="group grid grid-cols-[52px_1fr_auto] items-start gap-x-3 rounded-[7px] px-2 py-[7px] transition-colors hover:bg-veil"
       title="Click to highlight this step in the story"
       onClick={() => {
         useUI.setState({ under: true })
@@ -132,30 +132,30 @@ function SpanRow({ span, max }: { span: SpanRecord; max: number }): React.JSX.El
         <div className="flex items-baseline gap-2">
           <span className="font-mono text-[12px] text-fg">{span.name}</span>
           {span.input && (
-            <span className="truncate font-mono text-[11px] text-fg-5">({span.input})</span>
+            <span className="truncate font-mono text-[11px] text-fg-3">({span.input})</span>
           )}
         </div>
-        <div className="mt-1 h-[2px] w-full overflow-hidden rounded-full bg-white/[0.05]">
+        <div className="mt-1 h-[2px] w-full overflow-hidden rounded-full bg-mark">
           <div
             className={cx(
               'h-full rounded-full',
               span.status === 'error'
-                ? 'bg-snag/70'
+                ? 'bg-snag'
                 : span.status === 'recovered'
-                  ? 'bg-calm/70'
+                  ? 'bg-calm'
                   : 'bg-fg-4'
             )}
             style={{ width: `${width}%` }}
           />
         </div>
         <div className="mt-1 flex items-baseline gap-2 text-[11px]">
-          <span className="truncate text-fg-3">{span.output}</span>
+          <span className="truncate text-fg-2">{span.output}</span>
           {span.tokens && (
-            <span className="num shrink-0 text-fg-5">
+            <span className="num shrink-0 text-fg-4">
               {span.tokens.input + span.tokens.output} tok
             </span>
           )}
-          {span.cost != null && <span className="num shrink-0 text-fg-5">{tiny(span.cost)}</span>}
+          {span.cost != null && <span className="num shrink-0 text-fg-4">{tiny(span.cost)}</span>}
         </div>
       </div>
 

@@ -188,34 +188,45 @@ export interface EntireStatus {
   error: string | null
 }
 
+/** One model in the brain pool, and whether it can serve right now. */
+export interface BrainStatus {
+  id: string
+  /** False while the provider says this model is over its limit. */
+  ready: boolean
+  /** Ms until the provider says it can serve again. Null when it is ready. */
+  resetsInMs: number | null
+  /** The provider's own words, shortened. Null when it is ready. */
+  reason: string | null
+}
+
 /** The model doing the thinking, and the classifier screening what it reads. */
 export interface ModelStatus {
   connected: boolean
+  /** The model that will serve the next call. */
   model: string
   guard: string
   error: string | null
+  /** Every model this key can run, in the order the agent tries them. */
+  brains: BrainStatus[]
+  /** How many times the pool has moved this session. */
+  handovers: number
 }
 
 /* ------------------------------------------------------------- connectors */
 
+/**
+ * The engines a task can be handed to.
+ *
+ * Every id here is a thing this app can actually reach. There is deliberately
+ * no id for a competitor's service: an engine list that mixes providers in
+ * with products that merely look like providers is a list that lies about what
+ * will happen when a task is dispatched to it.
+ */
 export type ConnectorId =
-  | 'auto'
-  | 'pi'
-  | 'grok'
-  | 'claude'
-  | 'chatgpt'
-  | 'muse'
-  | 'gemini'
-  | 'roma'
-  | 'mcp'
+  'auto' | 'pi' | 'claude' | 'grok' | 'chatgpt' | 'muse' | 'gemini' | 'github'
 
 export type ConnectorCategory =
-  | 'code'
-  | 'search'
-  | 'reasoning'
-  | 'creative'
-  | 'protocol'
-  | 'desktop'
+  'code' | 'search' | 'reasoning' | 'creative' | 'protocol' | 'desktop'
 
 export interface ConnectorInfo {
   id: ConnectorId
@@ -229,6 +240,21 @@ export interface ConnectorInfo {
   description: string
   endpoint?: string
   requiresKey?: string
+  /**
+   * The model that will actually do the thinking for this engine, e.g.
+   * `claude-sonnet-5` or `openai/gpt-oss-120b`. Shown wherever an engine is
+   * picked, because "Claude" on its own does not tell you whether the work is
+   * going to be done by Claude or by whatever model happens to be loaded.
+   */
+  model?: string
+  /** The provider actually serving that model: Anthropic, Google, Groq, … */
+  modelProvider?: string
+  /**
+   * False when the engine's own provider is not configured and the task will
+   * run on the local model instead. The UI says so rather than implying the
+   * request went somewhere it did not.
+   */
+  native?: boolean
 }
 
 export interface Integrations {
@@ -279,8 +305,13 @@ export interface DoneApi {
   checkpoint(taskId: string): Promise<{ ok: boolean; id: string | null; message: string }>
   revealData(): Promise<void>
   openExternal(url: string): Promise<void>
-  setConnectorConfig(id: ConnectorId, config: { apiKey?: string; endpoint?: string }): Promise<{ ok: boolean; message: string }>
+  setConnectorConfig(
+    id: ConnectorId,
+    config: { apiKey?: string; endpoint?: string }
+  ): Promise<{ ok: boolean; message: string }>
   windowAction(action: 'minimize' | 'maximize' | 'close' | 'fullscreen'): Promise<void>
+  /** Persisted in the main process; the renderer asks for it on every change. */
+  setTheme(choice: 'dark' | 'light' | 'system', resolved: 'dark' | 'light'): Promise<void>
 }
 
 /* ---------------------------------------------------------------- commands */

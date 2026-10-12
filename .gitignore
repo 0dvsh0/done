@@ -17,4 +17,7 @@ release/
 Thumbs.db
 
 # Entire keeps its own state out of the tree
-.entire/cache/
+.entire/cache/.shots
+
+# Landing-page screenshots from scripts/shoot-page.js
+.shots

@@ -1,185 +1,175 @@
 import type { ConnectorId, Task } from '../../shared/types'
 import type { Step } from '../integrations'
-import { createPiModels, getPiModel } from '../pi'
 
 export interface RouteDecision {
   connector: ConnectorId
+  /** One short line. This is shown to the user, so it is written for them. */
   reason: string
   plan: string[]
   enrichedPrompt: string
 }
 
+/* ==========================================================================
+   Choosing the engine.
+
+   This used to open a model call of its own, before any work started, purely
+   to pick a connector. That was a bad trade three times over: it cost a round
+   trip and a few thousand tokens on every single task, it could fail or stall
+   on a rate limit before the real work had even begun, and — worst — it was
+   free to choose an engine that could not do the job. Handed "what is the
+   weather", it would route to a connector with no tools, which would write
+   four paragraphs about weather and accomplish nothing.
+
+   So: no model call. The choice is made here, in a few comparisons, instantly
+   and for free.
+
+   The rule that matters is capability, not vibes. A question that a service
+   can answer with one request — the open issues on a repository — goes to the
+   engine that holds that service's API, rather than to the local model, which
+   would otherwise open a browser, wait for a client-side router to hydrate and
+   read the DOM to get a structured answer by hand. That is the difference
+   between delegating and doing it yourself badly.
+   ========================================================================== */
+
+interface Shape {
+  connector: ConnectorId
+  reason: string
+  /**
+   * A predicate rather than one composed regex. A regex built by splicing
+   * other regexes' `.source` together silently drops grouping on any pattern
+   * that is a top-level alternation, so a lookahead quietly stops looking
+   * ahead after its first branch — and every request that should have been
+   * delegated quietly wasn't, with no error anywhere.
+   */
+  matches?: (title: string) => boolean
+  test?: RegExp
+}
+
+/* --------------------------------------------------------------- the shape
+   of the request, worked out before any of the individual wordings. */
+
+const REMOTE_QUESTION =
+  /\b(issue|issues|pr|pull ?requests?|release|releases|commit|commits|changelog|tag|tags|stars?|forks?)\b/i
+
+/** `owner/repo`, a github.com URL, or the word "repo" in any spelling. */
+const REPO_REFERENCE =
+  /(?:\b[\w.-]+\/[\w.-]+\b)|(?:github\.com)|(?:\brepos?(?:sitory|s)?\b)|(?:\bcodebase\b)/i
+
+/** Words that mean "change something", which is local work, not a lookup. */
+const LOCAL_ACTION =
+  /\b(fix|write|refactor|implement|debug|compile|build|run|test|install|create|add|remove|delete|update|audit|review|security|vulnerabilit|bug|patch|migrate|rename|port|deploy)\b/i
+
 /**
- * The Intelligent Dispatcher Brain.
- *
- * Rather than forcing every task through a single generic tool loop, our LLM
- * assesses the user's intent, enriches the prompt with context (workspace,
- * budget, constraints), and routes to the best connected agent — while
- * maintaining a calm, clean, transparent UI.
+ * Ordered most-specific first. The first match wins, so a request about a
+ * codebase that also says "latest" is treated as code, not as news.
  */
-export async function routeTask(
-  task: Task,
-  _step: Step,
-  rootPath: string
-): Promise<RouteDecision> {
-  // If the user explicitly designated a connector, honor it directly
+const SHAPES: Shape[] = [
+  {
+    connector: 'github',
+    reason: 'That is a question about a repository, so it goes to GitHub rather than a browser.',
+    matches: (t) => REMOTE_QUESTION.test(t) && REPO_REFERENCE.test(t) && !LOCAL_ACTION.test(t)
+  },
+  {
+    connector: 'gemini',
+    reason: 'It spans a lot of files, so this reads widely first.',
+    test: /\b(whole repo|entire repo\w*|all (the )?files|across the (repo|codebase)|audit the (repo|codebase)|every (file|package))\b/i
+  },
+  {
+    connector: 'claude',
+    reason: 'It needs real code, changed and run.',
+    test: /\b(code|coding|python|javascript|typescript|script|function|class|api|refactor|debug|bug|test|npm|repo\w*|git\b|github|compile|build|error|stack ?trace|implement)\b/i
+  },
+  {
+    connector: 'grok',
+    reason: 'It depends on what is true right now.',
+    test: /\b(latest|current|today|tonight|this (week|morning)|now\b|news|weather|price|stock|score|who won|release date|live|recent|right now|search for|look up|check (the )?(web|internet))\b/i
+  },
+  {
+    connector: 'muse',
+    reason: 'It wants ideas rather than a lookup.',
+    test: /\b(brainstorm|ideas?|name (it|this|them)|slogan|tagline|concept|creative|design|pitch|copy|marketing|brand|story)\b/i
+  },
+  {
+    connector: 'chatgpt',
+    reason: 'It is a question that needs working through.',
+    test: /\b(analyz|analys|compare|evaluat|explain|why\b|how does|how do|break ?down|pros and cons|trade-?off|think through|prospect|calculat|math|essay|summar|draft)\b/i
+  }
+]
+
+/** Every shape agrees on a title, however it was written down. */
+function accepts(shape: Shape, title: string): boolean {
+  return shape.matches ? shape.matches(title) : Boolean(shape.test?.test(title))
+}
+
+/**
+ * Choosing where to work does not decide what the work is, so this hands back
+ * an empty plan. The steps in the detail pane are the calls the agent actually
+ * made, recorded as it makes them — a plan written before the run starts is a
+ * guess, and a guess presented as a list of steps is worse than no list.
+ */
+const PLAN: string[] = []
+
+/**
+ * Picks an engine for one task. Synchronous by design: choosing where to work
+ * is bookkeeping, and it should never be the slowest part of a small job.
+ */
+export function routeTask(task: Task, _step: Step, rootPath: string): RouteDecision {
+  // An engine the user picked by hand is not second-guessed.
   if (task.connector && task.connector !== 'auto') {
-    const userChoice = task.connector
-    const plan = [
-      `Dispatch task to ${userChoice}`,
-      `Execute steps with enriched context`,
-      `Verify output and generate receipt`
-    ]
     return {
-      connector: userChoice,
-      reason: `User explicitly selected ${userChoice} connector`,
-      plan,
+      connector: task.connector,
+      reason: `Running on ${label(task.connector)}, as you chose.`,
+      plan: PLAN,
       enrichedPrompt: buildEnrichedPrompt(task, rootPath)
     }
   }
 
-  // Fast heuristic classification fallback if offline or prompt is clear-cut
-  const titleLower = task.title.toLowerCase()
-  const isCode =
-    /\b(code|python|script|function|typescript|javascript|rust|refactor|debug|github|git|npm|repo|class|api|fix|bug|test)\b/.test(
-      titleLower
-    )
-  const isRealtime =
-    /\b(news|latest|current|today|sentiment|twitter|trends?|x\.com|live|recent|who is|what is|search|check now)\b/.test(
-      titleLower
-    )
-  const isCreative =
-    /\b(brainstorm|idea|name|slogan|tagline|design|pitch|concept|creative|story|spark)\b/.test(
-      titleLower
-    )
-  const isMathOrLogic =
-    /\b(calculate|math|analyze|compare|evaluate|logic|deduce|deduction|essay|breakdown|trade-off|proof)\b/.test(
-      titleLower
-    )
-  const isWholeRepo =
-    /\b(entire repo|entire repository|whole codebase|entire codebase|all \d+ packages|massive context|large repo)\b/.test(
-      titleLower
-    )
-  const isLocalSystem =
-    /\b(clipboard|ram|cpu|disk|system info|local file|screenshot|battery|chromium|browser)\b/.test(
-      titleLower
-    )
-  const isRomaSync = /\b(roma|mcp|sync tasks?|to-do list)\b/.test(titleLower)
-
-  let defaultConnector: ConnectorId = 'pi'
-  let defaultReason = 'Dispatched to Pi Agent Core for native desktop execution'
-
-  if (isWholeRepo) {
-    defaultConnector = 'gemini'
-    defaultReason = 'Dispatched to Gemini CLI for large-context whole-codebase comprehension'
-  } else if (isCode) {
-    defaultConnector = 'claude'
-    defaultReason = 'Dispatched to Claude Code for software engineering and precision codebase changes'
-  } else if (isRealtime) {
-    defaultConnector = 'grok'
-    defaultReason = 'Dispatched to xAI Grok for real-time web intelligence and fast live search'
-  } else if (isCreative) {
-    defaultConnector = 'muse'
-    defaultReason = 'Dispatched to Muse Spark for divergent creative ideation and design'
-  } else if (isMathOrLogic) {
-    defaultConnector = 'chatgpt'
-    defaultReason = 'Dispatched to ChatGPT for structured multi-step analytical reasoning'
-  } else if (isRomaSync) {
-    defaultConnector = 'roma'
-    defaultReason = 'Dispatched to Roma MCP for cross-agent task synchronization'
-  } else if (isLocalSystem) {
-    defaultConnector = 'pi'
-    defaultReason = 'Dispatched to Pi Agent Core for native local desktop tools'
+  const title = task.title.trim()
+  for (const shape of SHAPES) {
+    if (!accepts(shape, title)) continue
+    return {
+      connector: shape.connector,
+      reason: shape.reason,
+      plan: PLAN,
+      enrichedPrompt: buildEnrichedPrompt(task, rootPath)
+    }
   }
 
-  // Next, run LLM classification pass for context enrichment & nuanced routing
-  try {
-    const models = createPiModels()
-    const model = getPiModel()
-
-    const classifyPrompt = [
-      `You are the Intelligent Router Brain in Done, an agentic desktop app inspired by Roma, Grok Bot, and Muse Spark.`,
-      `You do NOT execute tasks yourself. Your role is to determine which connected agent should receive this task:`,
-      `- "claude": Best for programming, scripts, debugging, terminal, refactoring, files.`,
-      `- "grok": Best for real-time search, news, live trends, Twitter/X, fast unfiltered analysis.`,
-      `- "chatgpt": Best for deep multi-step reasoning, math, essays, structured analysis.`,
-      `- "muse": Best for creative brainstorming, design sparks, product naming, slogans.`,
-      `- "gemini": Best for huge-context whole-codebase analysis.`,
-      `- "roma": Best for external to-do list sync via Model Context Protocol.`,
-      `- "pi": Best for direct local OS actions (clipboard, system info, local browser).`,
-      '',
-      `Task: ${task.title}`,
-      task.notes && task.notes.length ? `Notes: ${task.notes.join('; ')}` : '',
-      '',
-      `Respond with strict JSON ONLY in this format:`,
-      `{"connector": "claude"|"grok"|"chatgpt"|"muse"|"gemini"|"roma"|"pi", "reason": "concise explanation", "steps": ["Step 1", "Step 2", "Step 3"]}`
-    ].join('\n')
-
-    const response = await models.streamSimple(
-      model,
-      {
-        messages: [
-          {
-            role: 'user',
-            content: [{ type: 'text', text: classifyPrompt }],
-            timestamp: Date.now()
-          }
-        ]
-      },
-      { maxRetries: 2 }
-    )
-
-    let raw = ''
-    for await (const chunk of response) {
-      if (chunk.type === 'text_delta') raw += chunk.delta
-    }
-
-    const jsonMatch = raw.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as {
-        connector?: ConnectorId
-        reason?: string
-        steps?: string[]
-      }
-      if (parsed.connector) {
-        defaultConnector = parsed.connector
-      }
-      if (parsed.reason) {
-        defaultReason = parsed.reason
-      }
-      const steps = (parsed.steps ?? []).slice(0, 5)
-      return {
-        connector: defaultConnector,
-        reason: defaultReason,
-        plan: steps.length ? steps : [`Dispatch to ${defaultConnector}`, 'Execute task', 'Verify & report'],
-        enrichedPrompt: buildEnrichedPrompt(task, rootPath)
-      }
-    }
-  } catch {
-    // Graceful fallback to heuristic classification
-  }
-
+  // Anything unrecognised goes to the local engine, which is the one that can
+  // act on the machine without needing to know in advance what kind of task
+  // this is.
   return {
-    connector: defaultConnector,
-    reason: defaultReason,
-    plan: [
-      `Route task to ${defaultConnector}`,
-      `Execute steps with context`,
-      `Verify result and generate receipt`
-    ],
+    connector: 'pi',
+    reason: 'Starting on this machine.',
+    plan: PLAN,
     enrichedPrompt: buildEnrichedPrompt(task, rootPath)
   }
 }
 
+const LABELS: Record<ConnectorId, string> = {
+  auto: 'automatic routing',
+  pi: 'Pi',
+  grok: 'Grok',
+  claude: 'Claude',
+  chatgpt: 'ChatGPT',
+  muse: 'Muse',
+  gemini: 'Gemini',
+  github: 'GitHub'
+}
+
+export const connectorLabel = (id: ConnectorId): string => LABELS[id] ?? 'Pi'
+
+const label = (id: ConnectorId): string => LABELS[id] ?? id
+
 function buildEnrichedPrompt(task: Task, rootPath: string): string {
   const parts = [
-    `Task Goal: ${task.title}`,
-    task.when ? `Deadline: ${task.when}` : '',
+    task.title.trim(),
+    task.when ? `Needed by: ${task.when}` : '',
     task.budget ? `Budget: ${task.budget}` : '',
-    `Workspace Directory: ${rootPath}`,
-    task.notes && task.notes.length
-      ? `User Instructions:\n${task.notes.map((n) => `- ${n}`).join('\n')}`
-      : ''
+    task.notes.length
+      ? `What the user has said so far:\n${task.notes.map((n) => `- ${n}`).join('\n')}`
+      : '',
+    `This machine's working directory is ${rootPath}. Files and commands are relative to it unless the user names a path.`
   ]
-  return parts.filter(Boolean).join('\n')
+  return parts.filter(Boolean).join('\n\n')
 }

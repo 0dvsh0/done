@@ -1,74 +1,95 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
-import type { AppState, Limits, Task } from '../../../shared/types'
-import { clock, cx, money } from '../lib/format'
+import type { AppState, ConnectorId, ConnectorInfo, Task } from '../../../shared/types'
+import { clock, connectorLabel, cx } from '../lib/format'
 import { api, sections, toast, useUI } from '../store'
 import type { Section } from '../store'
 import { Dot } from './Dot'
 import { GroupPicker } from './GroupPicker'
+import { Code, Menu } from './primitives'
 import * as I from './Icons'
 
-const EXTRAS = {
-  when: ['whenever', 'today', 'this week', 'by Friday'],
-  budget: ['no spending', '$25', '$100', '$500'],
-  ask: ['before anything big', 'before every step', 'only if stuck']
-} as const
-
-type ExtraKey = keyof typeof EXTRAS
-
-const CONNECTORS: { id: import('../../../shared/types').ConnectorId; label: string }[] = [
-  { id: 'auto', label: 'Auto (AI Routed)' },
-  { id: 'grok', label: 'xAI Grok' },
-  { id: 'claude', label: 'Claude Code' },
-  { id: 'chatgpt', label: 'ChatGPT & Codex' },
-  { id: 'muse', label: 'Muse Spark' },
-  { id: 'pi', label: 'Pi Agent Core' },
-  { id: 'roma', label: 'Roma MCP' }
+const WHEN_OPTIONS: { value: string; label: string; note: string }[] = [
+  { value: 'anytime', label: 'Whenever', note: 'No deadline' },
+  { value: 'Today', label: 'Today', note: 'Before you stop' },
+  { value: 'By Friday', label: 'This week', note: 'By Friday' }
 ]
 
-export function ConnectorPill({ id }: { id?: string }): React.JSX.Element | null {
+/**
+ * The money a single run may spend before it stops and asks.
+ *
+ * This is a list of amounts a person recognises, not an arbitrary number
+ * field: the point of a ceiling is that you know what you are agreeing to
+ * before you agree to it, and `$0` has to be visibly the strictest option
+ * rather than a value you find by accident.
+ */
+const BUDGET_OPTIONS: { value: string; label: string; note: string }[] = [
+  { value: 'ask', label: 'Ask me first', note: 'Stops before the first thing costs anything' },
+  { value: '$1', label: 'Up to $1', note: 'A cheap run' },
+  { value: '$5', label: 'Up to $5', note: '' },
+  { value: '$25', label: 'Up to $25', note: '' },
+  { value: '$100', label: 'Up to $100', note: '' }
+]
+
+const ENGINES: { id: ConnectorId; label: string; note: string }[] = [
+  { id: 'pi', label: 'Pi', note: 'This machine · browser, shell, files' },
+  { id: 'github', label: 'GitHub', note: 'Issues, pull requests, releases' },
+  { id: 'claude', label: 'Claude', note: 'Code changed and run' },
+  { id: 'gemini', label: 'Gemini', note: 'Whole repositories, read wide' },
+  { id: 'grok', label: 'Grok', note: 'What is true right now' },
+  { id: 'chatgpt', label: 'ChatGPT', note: 'Worked through step by step' },
+  { id: 'muse', label: 'Muse', note: 'Ideas, landed in a real file' },
+  { id: 'auto', label: 'Let it choose', note: 'I pick the engine from the wording' }
+]
+
+const DEFAULT_ENGINE = 'pi'
+
+/**
+ * Which engine ran a task.
+ *
+ * This was a coloured badge — amber, orange, emerald, purple, blue, rose, one
+ * per agent. Six new meanings for six brands, on every row of a list whose
+ * whole design rests on colour meaning one thing: amber is "needs you", coral
+ * is "something broke", sage is "reversible". Once six agents each had a hue,
+ * none of those three still read as themselves.
+ *
+ * So it is one white now, at one opacity on the ramp — quiet enough to stay off
+ * your eye, dark enough to still be read. You can see which engine ran it, and
+ * nothing in the row competes with the dot or the deadline.
+ */
+export function ConnectorTag({ id }: { id?: string }): React.JSX.Element | null {
   if (!id || id === 'auto') return null
-  const BADGES: Record<string, { label: string; tone: string }> = {
-    grok: { label: '⚡ Grok', tone: 'text-amber-400/90 border-amber-500/25 bg-amber-500/[0.06]' },
-    claude: { label: '✻ Claude', tone: 'text-orange-400/90 border-orange-500/25 bg-orange-500/[0.06]' },
-    chatgpt: { label: '◈ ChatGPT', tone: 'text-emerald-400/90 border-emerald-500/25 bg-emerald-500/[0.06]' },
-    muse: { label: '✦ Muse', tone: 'text-purple-400/90 border-purple-500/25 bg-purple-500/[0.06]' },
-    gemini: { label: '✦ Gemini', tone: 'text-blue-400/90 border-blue-500/25 bg-blue-500/[0.06]' },
-    roma: { label: '☍ Roma', tone: 'text-rose-400/90 border-rose-500/25 bg-rose-500/[0.06]' },
-    pi: { label: '● Pi Agent', tone: 'text-fg-4 border-line bg-ink-2/50' }
-  }
-  const badge = BADGES[id] ?? { label: id, tone: 'text-fg-4 border-line bg-ink-2/50' }
   return (
-    <span
-      className={cx(
-        'shrink-0 rounded-[5px] border px-1.5 py-[1px] font-mono text-[10px] leading-tight select-none',
-        badge.tone
-      )}
-    >
-      {badge.label}
+    <span className="num shrink-0 text-[11px] tracking-[0.02em] text-fg-4 select-none">
+      {connectorLabel(id)}
     </span>
   )
 }
 
 /**
- * One field. You write what you need; four quiet chips let you add a
- * deadline, a ceiling, a hand-off rule and a place to file it, without ever
- * leaving the sentence.
+ * One field. You write what you need; four quiet menus let you add an engine,
+ * a deadline, a ceiling and a place to file it, without ever leaving the
+ * sentence.
+ *
+ * The engine is the one that matters most, so it comes first and it defaults
+ * to a real engine rather than to a decision made for you. "Let it choose" is
+ * there — it is genuinely useful — but it is an option you pick, not the state
+ * the app puts you in.
  */
 export function Composer({
-  limits,
-  groups
+  groups,
+  engines
 }: {
-  limits: Limits
   groups: string[]
+  engines: ConnectorInfo[]
 }): React.JSX.Element {
   const [value, setValue] = useState('')
-  const [idx, setIdx] = useState<Record<ExtraKey, number>>({ when: 0, budget: 0, ask: 0 })
-  const [connectorIdx, setConnectorIdx] = useState(0)
+  const [when, setWhen] = useState('anytime')
+  const [budget, setBudget] = useState('ask')
+  const [engine, setEngine] = useState<ConnectorId>(DEFAULT_ENGINE)
   const [group, setGroup] = useState<string | null>(null)
   const [picking, setPicking] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  const showSheet = useUI((s) => s.showSheet)
 
   // ⌘N / the File menu both land here.
   useEffect(() => {
@@ -78,30 +99,16 @@ export function Composer({
     }
   }, [])
 
-  const cycle = (key: ExtraKey): void => {
-    setIdx((s) => ({ ...s, [key]: (s[key] + 1) % EXTRAS[key].length }))
-    inputRef.current?.focus()
-  }
-
-  const cycleConnector = (): void => {
-    setConnectorIdx((s) => (s + 1) % CONNECTORS.length)
-    inputRef.current?.focus()
-  }
-
   const submit = (): void => {
     const text = value.trim()
     if (!text) return
-    const when = EXTRAS.when[idx.when]
-    const budget = EXTRAS.budget[idx.budget]
     void api.create(text, {
-      when:
-        when === 'whenever' ? null : when === 'today' ? 'Today' : `By ${when.replace(/^by /, '')}`,
-      budget: budget === 'no spending' ? null : `Up to ${budget}`,
+      when: when === 'anytime' ? null : when,
+      budget: budget === 'ask' ? null : `Up to ${budget}`,
       group,
-      connector: CONNECTORS[connectorIdx].id
+      connector: engine
     })
     setValue('')
-    setIdx({ when: 0, budget: 0, ask: 0 })
     setGroup(null)
     setPicking(false)
     toast('Written down. It’ll start in a moment.')
@@ -109,6 +116,22 @@ export function Composer({
   }
 
   const typing = value.trim().length > 0
+
+  /* An engine the app cannot actually reach should not sit silently in the
+     list looking like it works. The note under each one says which model will
+     serve it, and says so plainly when that model is the local one. */
+  const engineOptions = ENGINES.map((e) => {
+    const live = engines.find((c) => c.id === e.id)
+    const note =
+      e.id === 'auto'
+        ? e.note
+        : live?.native === false
+          ? `${e.note} · no key, runs locally`
+          : live?.model
+            ? `${e.note} · ${live.model}`
+            : e.note
+    return { value: e.id, label: e.label, note }
+  })
 
   return (
     <form
@@ -118,7 +141,7 @@ export function Composer({
       }}
       className={cx(
         'column pt-1 pb-5',
-        'rounded-[13px] border bg-ink-1/60 transition-colors duration-200',
+        'rounded-[13px] border bg-ink-1/70 transition-colors duration-200',
         typing ? 'border-line-2 bg-ink-1' : 'border-line hover:border-line-2'
       )}
     >
@@ -138,11 +161,11 @@ export function Composer({
             }
             if (e.key === 'Tab') {
               e.preventDefault()
-              cycle('when')
+              inputRef.current?.focus()
             }
           }}
           aria-label="What needs doing?"
-          className="min-w-0 flex-1 bg-transparent text-[14.5px] text-fg placeholder:text-fg-4"
+          className="min-w-0 flex-1 bg-transparent text-[14.5px] text-fg"
         />
       </div>
 
@@ -156,18 +179,36 @@ export function Composer({
             className="overflow-hidden"
           >
             <div className="flex flex-wrap items-center gap-1.5 border-t border-line px-3 py-2.5">
-              <Chip onClick={cycleConnector}>
-                Via <em>{CONNECTORS[connectorIdx].label}</em>
-              </Chip>
-              <Chip onClick={() => cycle('when')}>
-                By <em>{EXTRAS.when[idx.when]}</em>
-              </Chip>
-              <Chip onClick={() => cycle('budget')}>
-                Up to <em>{EXTRAS.budget[idx.budget]}</em>
-              </Chip>
-              <Chip onClick={() => cycle('ask')}>
-                Ask me <em>{EXTRAS.ask[idx.ask]}</em>
-              </Chip>
+              <Menu
+                label="On"
+                title="Which engine does this"
+                value={engine}
+                options={engineOptions}
+                onChange={(v) => {
+                  setEngine(v)
+                  inputRef.current?.focus()
+                }}
+              />
+              <Menu
+                label="By"
+                title="When it is needed"
+                value={when}
+                options={WHEN_OPTIONS}
+                onChange={(v) => {
+                  setWhen(v)
+                  inputRef.current?.focus()
+                }}
+              />
+              <Menu
+                label="Up to"
+                title="How much this one run may cost"
+                value={budget}
+                options={BUDGET_OPTIONS}
+                onChange={(v) => {
+                  setBudget(v)
+                  inputRef.current?.focus()
+                }}
+              />
               {picking ? (
                 <GroupPicker
                   value={group}
@@ -189,36 +230,15 @@ export function Composer({
               )}
               <button
                 type="submit"
-                className="no-drag ml-auto inline-flex h-[24px] items-center gap-1.5 rounded-[7px] bg-fg px-2.5 text-[12px] font-medium text-ink-0 transition-opacity hover:opacity-85"
+                className="no-drag ml-auto inline-flex h-[24px] items-center gap-1.5 rounded-[7px] bg-fg px-2.5 text-[12px] font-medium text-ink-0 transition-opacity hover:opacity-88"
               >
-                Hand it off
+                Add
                 <I.ArrowRight className="[&_svg]:h-[13px] [&_svg]:w-[13px]" />
               </button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {!typing && (
-        <button
-          type="button"
-          onClick={() => showSheet('limits')}
-          className="no-drag flex w-full items-center gap-2 border-t border-line px-3.5 py-2 text-left text-[11.5px] text-fg-4 transition-colors hover:text-fg-3"
-        >
-          <I.Shield className="shrink-0 text-fg-5 [&_svg]:h-[13px] [&_svg]:w-[13px]" />
-          <span className="min-w-0 flex-1 truncate">
-            {limits.spend > 0 ? (
-              <>
-                It runs on its own until a job costs{' '}
-                <em className="not-italic text-fg-3">{money(limits.spend)}</em>.
-              </>
-            ) : (
-              'It stops and asks before a job costs anything.'
-            )}{' '}
-            Nothing irreversible, ever.
-          </span>
-        </button>
-      )}
     </form>
   )
 }
@@ -243,8 +263,8 @@ function Chip({
         'no-drag inline-flex h-[24px] items-center gap-1 rounded-[7px] border',
         'px-2 text-[11.5px] transition-colors',
         on
-          ? 'border-line-2 bg-white/[0.06] text-fg'
-          : 'border-line text-fg-3 hover:border-line-2 hover:bg-white/[0.04] hover:text-fg-2'
+          ? 'border-line-2 bg-veil text-fg'
+          : 'border-line text-fg-3 hover:border-line-2 hover:bg-veil hover:text-fg-2'
       )}
     >
       {children}
@@ -303,7 +323,7 @@ function Group({
         <span
           className={cx(
             'text-[10.5px] font-medium tracking-[0.09em] uppercase',
-            tone === 'needs' ? 'text-needs/80' : 'text-fg-4'
+            tone === 'needs' ? 'text-needs' : 'text-fg-3'
           )}
         >
           {label}
@@ -333,7 +353,7 @@ function GroupSection({
       count={section.tasks.length}
       open={!isFolded}
       onToggle={() => toggleFold(section.key)}
-      icon={<I.Folder className="text-fg-5 [&_svg]:h-[12px] [&_svg]:w-[12px]" />}
+      icon={<I.Folder className="text-fg-4 [&_svg]:h-[12px] [&_svg]:w-[12px]" />}
       renaming={renaming}
       onRenameDone={() => setRenaming(false)}
       actions={
@@ -430,13 +450,13 @@ function Fold({
             className="flex min-w-0 flex-1 items-center gap-2 text-left"
           >
             {icon}
-            <span className="truncate text-[10.5px] font-medium tracking-[0.09em] text-fg-4 uppercase transition-colors group-hover:text-fg-3">
+            <span className="truncate text-[10.5px] font-medium tracking-[0.09em] text-fg-3 uppercase transition-colors group-hover:text-fg-2">
               {label}
             </span>
-            <span className="num text-[11px] text-fg-5">{count}</span>
+            <span className="num text-[11px] text-fg-4">{count}</span>
             <I.Chevron
               className={cx(
-                'ml-0.5 shrink-0 text-fg-5 transition-transform duration-200 [&_svg]:h-[12px] [&_svg]:w-[12px]',
+                'ml-0.5 shrink-0 text-fg-4 transition-transform duration-200 [&_svg]:h-[12px] [&_svg]:w-[12px]',
                 open ? '' : '-rotate-90'
               )}
             />
@@ -523,7 +543,7 @@ function HoverAction({
         onClick()
       }}
       onKeyDown={(e) => e.key === 'Enter' && onClick()}
-      className="no-drag rounded-[5px] px-1.5 py-0.5 text-[11px] text-fg-4 transition-colors hover:bg-white/[0.06] hover:text-fg-2"
+      className="no-drag rounded-[5px] px-1.5 py-0.5 text-[11px] text-fg-3 transition-colors hover:bg-veil hover:text-fg"
     >
       {children}
     </span>
@@ -571,8 +591,8 @@ function Row({ task, open }: { task: Task; open: boolean }): React.JSX.Element {
       className={cx(
         'group relative -mx-2 flex cursor-default items-start gap-3 rounded-[10px] px-2 py-[9px]',
         'transition-colors duration-150',
-        open ? 'bg-white/[0.045]' : 'hover:bg-white/[0.025]',
-        task.id === cursorId && !open && 'bg-white/[0.02]'
+        open ? 'bg-veil-2' : 'hover:bg-veil',
+        task.id === cursorId && !open && 'bg-veil'
       )}
       onClick={() => (open ? closeTask() : openTask(task.id))}
       onDoubleClick={() => void api.control(task.id, 'pause')}
@@ -580,8 +600,8 @@ function Row({ task, open }: { task: Task; open: boolean }): React.JSX.Element {
       {flash && (
         <motion.span
           aria-hidden="true"
-          initial={{ boxShadow: '0 0 0 0 rgba(255,255,255,0.28)' }}
-          animate={{ boxShadow: '0 0 0 8px rgba(255,255,255,0)' }}
+          initial={{ boxShadow: '0 0 0 0 var(--app-pulse)' }}
+          animate={{ boxShadow: '0 0 0 8px transparent' }}
           transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
           className="pointer-events-none absolute top-1/2 left-[22px] h-[18px] w-[18px] -translate-y-1/2 rounded-full"
         />
@@ -600,14 +620,14 @@ function Row({ task, open }: { task: Task; open: boolean }): React.JSX.Element {
             {task.title}
           </p>
 
-          <ConnectorPill id={task.routedConnector || task.connector} />
+          <ConnectorTag id={task.routedConnector || task.connector} />
 
           <div className="ml-auto flex shrink-0 items-center gap-0.5">
             {side && (
               <span
                 className={cx(
                   'num text-[11px] whitespace-nowrap transition-opacity duration-150',
-                  task.state === 'needs' ? 'text-needs' : 'text-fg-5',
+                  task.state === 'needs' ? 'text-needs' : 'text-fg-4',
                   // Only step aside for the hover controls that replace it.
                   // "Answer" is the call to action — it must never vanish
                   // because the pointer happened to land on the row.
@@ -652,12 +672,15 @@ function TaskLine({ task }: { task: Task }): React.JSX.Element | null {
       key={shown}
       className={cx(
         'crossfade mt-0.5 line-clamp-2 text-[12.5px] leading-snug',
+        // The state colours carry their meaning at full strength. Fading them
+        // for "elegance" cost the sentence its meaning — amber at 75% no
+        // longer reads as "needs you", it reads as a slightly dirty white.
         task.state === 'needs'
-          ? 'text-needs/75'
+          ? 'text-needs'
           : task.state === 'snag'
-            ? 'text-snag/75'
+            ? 'text-snag'
             : dim
-              ? 'text-fg-5'
+              ? 'text-fg-4'
               : 'text-fg-3'
       )}
     >
@@ -679,7 +702,7 @@ function RowActions({ task, live }: { task: Task; live: boolean }): React.JSX.El
             e.stopPropagation()
             void api.control(task.id, 'pause')
           }}
-          className="no-drag inline-flex h-[20px] w-[22px] items-center justify-center rounded-[5px] text-fg-4 transition-colors hover:bg-white/[0.08] hover:text-fg-2"
+          className="no-drag inline-flex h-[20px] w-[22px] items-center justify-center rounded-[5px] text-fg-3 transition-colors hover:bg-veil-2 hover:text-fg"
         >
           {paused ? (
             <I.Play className="[&_svg]:h-[13px] [&_svg]:w-[13px]" />
@@ -696,7 +719,7 @@ function RowActions({ task, live }: { task: Task; live: boolean }): React.JSX.El
             e.stopPropagation()
             void api.control(task.id, yours ? 'take' : 'pause')
           }}
-          className="no-drag inline-flex h-[20px] w-[22px] items-center justify-center rounded-[5px] text-fg-4 transition-colors hover:bg-white/[0.08] hover:text-fg-2"
+          className="no-drag inline-flex h-[20px] w-[22px] items-center justify-center rounded-[5px] text-fg-3 transition-colors hover:bg-veil-2 hover:text-fg"
         >
           {yours ? (
             <I.Hand className="[&_svg]:h-[13px] [&_svg]:w-[13px]" />
@@ -719,8 +742,8 @@ function RowActions({ task, live }: { task: Task; live: boolean }): React.JSX.El
  */
 function EmptyState({ state }: { state: AppState }): React.JSX.Element {
   const model = state.integrations.model
-  const ask = (prompt: string): void => {
-    void api.create(prompt)
+  const ask = (prompt: string, connector: ConnectorId): void => {
+    void api.create(prompt, { connector })
     toast('Written down. It’ll start in a moment.')
   }
 
@@ -733,40 +756,44 @@ function EmptyState({ state }: { state: AppState }): React.JSX.Element {
 
       {!model.connected ? (
         <div className="mt-5 rounded-[11px] border border-needs/25 bg-needs/[0.06] px-4 py-3">
-          <p className="text-[13px] text-needs">There is no model key, so I can’t think yet.</p>
-          <p className="mt-1 text-[12px] leading-relaxed text-fg-4">
-            Add{' '}
-            <code className="rounded-[4px] bg-white/[0.06] px-1 font-mono text-[11px] text-fg-3">
-              LLM_API_KEY
-            </code>{' '}
-            to a{' '}
-            <code className="rounded-[4px] bg-white/[0.06] px-1 font-mono text-[11px] text-fg-3">
-              .env
-            </code>{' '}
-            file and restart. Until then nothing here is simulated — it just can’t run.
+          <p className="text-[13px] font-medium text-needs">
+            There is no model key, so I can’t think yet.
+          </p>
+          <p className="mt-1 text-[12px] leading-relaxed text-fg-3">
+            Add <Code>LLM_API_KEY</Code> to a <Code>.env</Code> file and restart. Until then nothing
+            here is simulated — it just can’t run.
           </p>
         </div>
       ) : (
         <>
-          <p className="mt-2 max-w-[34rem] text-[12.5px] leading-relaxed text-fg-4">
-            I run on <span className="text-fg-3">{model.model}</span>. I use a real browser, a real
-            shell and the real filesystem — and I stop and ask before anything I can’t take back.
+          {/* The model used to be named here, in a brighter white than the rest
+              of the sentence, as though knowing which weights are loaded were
+              part of what this app is for. It isn't. It is a detail that
+              belongs in Connections, where the rest of the plumbing lives, and
+              dropping it here let the sentence say the thing that matters. */}
+          <p className="mt-2 max-w-[34rem] text-[12.5px] leading-relaxed text-fg-3">
+            I use a real browser, a real shell and the real filesystem — and I stop and ask before
+            anything I can’t take back. Each of these names the engine that should do it, so you can
+            watch the work go where it belongs rather than being quietly re-routed.
           </p>
 
           <ul className="mt-6 grid gap-1.5">
-            {STARTERS.map(({ label, hint, prompt }) => (
+            {STARTERS.map(({ label, hint, prompt, engine }) => (
               <li key={label}>
                 <button
                   type="button"
-                  onClick={() => ask(prompt)}
-                  className="no-drag group flex w-full items-start gap-3 rounded-[10px] border border-line bg-ink-1/40 px-3.5 py-2.5 text-left transition-colors hover:border-line-2 hover:bg-ink-1"
+                  onClick={() => ask(prompt, engine)}
+                  className="no-drag group flex w-full items-start gap-3 rounded-[10px] border border-line bg-ink-1/50 px-3.5 py-2.5 text-left transition-colors hover:border-line-2 hover:bg-ink-1"
                 >
-                  <I.ArrowRight className="mt-[3px] shrink-0 text-fg-5 transition-colors group-hover:text-fg-3 [&_svg]:h-[13px] [&_svg]:w-[13px]" />
+                  <I.ArrowRight className="mt-[3px] shrink-0 text-fg-4 transition-colors group-hover:text-fg-2 [&_svg]:h-[13px] [&_svg]:w-[13px]" />
                   <span className="min-w-0">
                     <span className="block text-[13px] text-fg-2">{label}</span>
-                    <span className="mt-0.5 block text-[11.5px] leading-relaxed text-fg-5">
+                    <span className="mt-0.5 block text-[11.5px] leading-relaxed text-fg-3">
                       {hint}
                     </span>
+                  </span>
+                  <span className="num ml-auto shrink-0 self-center text-[10.5px] text-fg-4">
+                    {connectorLabel(engine)}
                   </span>
                 </button>
               </li>
@@ -781,29 +808,50 @@ function EmptyState({ state }: { state: AppState }): React.JSX.Element {
 /**
  * Every one of these has been run end to end against the real tools. They are
  * here because they work, not because they sound good.
+ *
+ * Each one pins the engine that should handle it. Handing "what are the open
+ * issues on this repo" to the local model means opening a browser, waiting for
+ * a client-side router to hydrate and reading the DOM to produce a list that
+ * one API call returns; the engine named on the row is the one that does it
+ * properly.
  */
-const STARTERS: { label: string; hint: string; prompt: string }[] = [
+const STARTERS: {
+  label: string
+  hint: string
+  prompt: string
+  engine: ConnectorId
+}[] = [
+  {
+    label: 'Read a repository’s open issues',
+    hint: 'One API request returns the real rows — number, title, author, labels, link.',
+    prompt: 'Give me the latest five open issues in vercel/next.js',
+    engine: 'github'
+  },
   {
     label: 'Research something on the web',
     hint: 'Searches, reads the pages, and checks its own answer before calling it done.',
-    prompt: 'Find out what the current Node.js LTS version is, and tell me when it went into LTS.'
+    prompt: 'Find out what the current Node.js LTS version is, and tell me when it went into LTS.',
+    engine: 'grok'
   },
   {
     label: 'Drive a real browser',
     hint: 'Opens pages in a hidden Chromium window and clicks with real mouse events.',
     prompt:
-      'Open duckduckgo.com, search for "best coffee shop in Seattle", and tell me the name and address of the top result.'
+      'Open duckduckgo.com, search for "best coffee shop in Seattle", and tell me the name and address of the top result.',
+    engine: 'pi'
   },
   {
     label: 'Have it write and change code',
     hint: 'Hands the job to a real coding agent in a folder, and reports the files it changed.',
     prompt:
-      'In the current project, write a Python script called fib.py that prints the first 20 Fibonacci numbers, then run it and paste the output.'
+      'In the current project, write a Python script called fib.py that prints the first 20 Fibonacci numbers, then run it and paste the output.',
+    engine: 'claude'
   },
   {
     label: 'Touch the files on this machine',
     hint: 'Reads and writes inside your own folders, and refuses anything outside them.',
     prompt:
-      'Create a file called shop-list.md in my Documents folder with a weekly shopping list for two people, then read it back.'
+      'Create a file called shop-list.md in my Documents folder with a weekly shopping list for two people, then read it back.',
+    engine: 'pi'
   }
 ]

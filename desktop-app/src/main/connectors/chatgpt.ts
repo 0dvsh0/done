@@ -1,13 +1,21 @@
 import type { AgentConnector, ConnectorContext, ConnectorResult } from './types'
 import type { ConnectorInfo } from '../../shared/types'
-import { createPiModels, getPiModel } from '../pi'
+import { runAgentLoop, type Persona } from './loop'
 
+/**
+ * ChatGPT — reasoning and structured breakdown.
+ *
+ * The connector that used to be the worst offender: it had no tools at all and
+ * answered from a single prompt. It carries the full tool set now, so a
+ * "reason carefully about this" request that turns out to need a file or a
+ * page can actually reach one.
+ */
 export class ChatGPTConnector implements AgentConnector {
   id = 'chatgpt' as const
-  name = 'ChatGPT & Codex'
-  blurb = 'On the web and in the terminal. Deep analytical reasoning, math, and structured synthesis.'
+  name = 'ChatGPT'
+  blurb = 'Multi-step reasoning and structured breakdown, with the same tools underneath.'
   category = 'reasoning' as const
-  badge = '◈ ChatGPT'
+  badge = 'ChatGPT'
   icon = 'chatgpt'
 
   private customKey: string | null = null
@@ -19,11 +27,7 @@ export class ChatGPTConnector implements AgentConnector {
   }
 
   isConfigured(): boolean {
-    return Boolean(
-      this.customKey ||
-      process.env['OPENAI_API_KEY'] ||
-      process.env['LLM_API_KEY']
-    )
+    return Boolean(this.customKey || process.env['OPENAI_API_KEY'] || process.env['LLM_API_KEY'])
   }
 
   getInfo(): ConnectorInfo {
@@ -36,85 +40,27 @@ export class ChatGPTConnector implements AgentConnector {
       icon: this.icon,
       connected: this.isConfigured(),
       description:
-        'ChatGPT & Codex by OpenAI provide premier analytical reasoning, mathematical breakdown, structured schema extraction, and document synthesis.',
+        'Structured analytical thinking: decomposing a problem, weighing options, and producing a result others can act on. Carries the same browser and filesystem tools as every other engine.',
       endpoint: this.customEndpoint || 'https://api.openai.com/v1',
       requiresKey: 'OPENAI_API_KEY'
     }
   }
 
-  async execute(prompt: string, ctx: ConnectorContext): Promise<ConnectorResult> {
-    ctx.setTaskLine('◈ [ChatGPT] Initializing reasoning chain...')
-    ctx.setTaskProgress(0.2)
-
-    const models = createPiModels()
-    const model = getPiModel()
-
-    let accumulated = ''
-    try {
-      const responseStream = models.streamSimple(
-        model,
-        {
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: [
-                    `You are ChatGPT & Codex by OpenAI, integrated into Done as a connected intelligence agent.`,
-                    `Specialty: Rigorous step-by-step logic, clear structuring, comprehensive problem solving, and analytical clarity.`,
-                    '',
-                    `Goal: ${prompt}`,
-                    '',
-                    `Deconstruct the problem, provide structured solutions, and conclude with actionable takeaways.`
-                  ].join('\n')
-                }
-              ],
-              timestamp: Date.now()
-            }
-          ]
-        },
-        { maxRetries: 3 }
-      )
-
-      for await (const chunk of responseStream) {
-        if (chunk.type === 'text_delta') {
-          accumulated += chunk.delta
-          const lastLine = accumulated.trim().split('\n').filter(Boolean).pop() ?? ''
-          if (lastLine) {
-            ctx.setTaskLine(`◈ [ChatGPT] ${lastLine.slice(0, 110)}`)
-          }
-        }
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      throw new Error(`ChatGPT execution error: ${msg}`)
+  execute(prompt: string, ctx: ConnectorContext): Promise<ConnectorResult> {
+    const persona: Persona = {
+      opening: 'Working through it.',
+      identity: [
+        'You are ChatGPT, the analytical side of this app.',
+        'You are rigorous, structured, and allergic to hand-waving.'
+      ],
+      craft: [
+        'Break the problem into parts, answer each, then check the parts against each other.',
+        'When the answer needs something you cannot see, fetch it — do not assume.',
+        'Lead with the conclusion. Support it underneath.'
+      ],
+      maxTurns: 12,
+      engine: 'chatgpt'
     }
-
-    ctx.setTaskProgress(0.95)
-    ctx.pushHistory({
-      tool: 'chatgpt_reasoning',
-      ok: true,
-      summary: `ChatGPT analysis: ${prompt.slice(0, 80)}`,
-      detail: accumulated,
-      args: 'engine="gpt-reasoning"'
-    })
-
-    const summaryLine = accumulated.split('\n').filter(Boolean)[0] || 'ChatGPT reasoning complete.'
-
-    return {
-      ok: true,
-      summary: summaryLine.slice(0, 160),
-      detail: accumulated,
-      receiptDraft: {
-        lines: [
-          ['Connected Agent', 'ChatGPT & Codex (OpenAI)'],
-          ['Analysis', summaryLine.slice(0, 80)],
-          ['Method', 'Multi-step structured reasoning']
-        ],
-        proof: ['openai.com/chatgpt', 'logical deduction passed'],
-        undo: null
-      }
-    }
+    return runAgentLoop(persona, ctx, prompt)
   }
 }

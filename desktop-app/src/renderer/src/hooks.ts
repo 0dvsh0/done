@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { AppState, Task } from '../../shared/types'
 import { api, isSectionOpen, sections, toast, useUI } from './store'
+import { useTheme } from './theme'
 
 const isTyping = (el: EventTarget | null): boolean => {
   const node = el as HTMLElement | null
@@ -167,6 +168,22 @@ export function useHotkeys(state: AppState | null): void {
         case ',':
           e.preventDefault()
           showSheet('limits')
+          break
+
+        /* Appearance. Shift so it never collides with a task that starts with
+           an L, and held beside the other "act on the window" keys. */
+        case 'L':
+          if (!e.shiftKey) break
+          e.preventDefault()
+          {
+            const { theme, resolved, choose } = useTheme.getState()
+            choose(resolved === 'dark' ? 'light' : 'dark')
+            toast(
+              theme === 'system'
+                ? `Appearance set to ${resolved === 'dark' ? 'dark' : 'light'}.`
+                : `Appearance is now ${resolved === 'dark' ? 'light' : 'dark'}.`
+            )
+          }
           break
 
         default:

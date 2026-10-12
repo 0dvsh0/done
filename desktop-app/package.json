@@ -10,11 +10,17 @@
     "start": "electron-vite preview",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false",
+    "check:route": "tsx scripts/route-check.ts",
+    "check:github": "tsx scripts/github-check.ts",
+    "check:page": "tsx scripts/page-check.ts",
+    "check:guard": "tsx scripts/guard-check.ts",
     "lint": "eslint --cache .",
     "format": "prettier --write .",
     "pack:win": "npm run build && electron-builder --win --dir",
     "pack:mac": "npm run build && electron-builder --mac --dir",
-    "pack:linux": "npm run build && electron-builder --linux --dir"
+    "pack:linux": "npm run build && electron-builder --linux --dir",
+    "check:search": "tsx scripts/search-check.ts",
+    "shoot:page": "electron scripts/shoot-page.js"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "^1.1.0",
@@ -46,6 +52,7 @@
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "tailwindcss": "^4.1.13",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^7.2.6",
     "zustand": "^5.0.8"

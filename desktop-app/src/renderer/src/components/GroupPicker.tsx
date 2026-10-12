@@ -49,7 +49,7 @@ export function GroupPicker({
         </Chip>
       ))}
       <Chip onClick={() => setNaming(true)} title="Name a new group">
-        <I.Folder className="text-fg-4 [&_svg]:h-[12px] [&_svg]:w-[12px]" />
+        <I.Folder className="text-fg-3 [&_svg]:h-[12px] [&_svg]:w-[12px]" />
         New
       </Chip>
     </div>
@@ -86,7 +86,7 @@ export function NewGroupInput({
   return (
     <div className="flex items-center gap-1.5">
       <div className="flex h-[24px] items-center gap-1.5 rounded-[7px] border border-line-2 bg-ink-1 px-2 focus-within:border-line-3">
-        <I.Folder className="text-fg-5 [&_svg]:h-[12px] [&_svg]:w-[12px]" />
+        <I.Folder className="text-fg-3 [&_svg]:h-[12px] [&_svg]:w-[12px]" />
         <input
           ref={ref}
           value={draft}
@@ -106,14 +106,14 @@ export function NewGroupInput({
             }
           }}
           onBlur={commit}
-          className="w-[108px] bg-transparent text-[11.5px] text-fg placeholder:text-fg-4"
+          className="w-[108px] bg-transparent text-[11.5px] text-fg "
         />
       </div>
       <button
         type="button"
         onClick={commit}
         disabled={!draft.trim()}
-        className="no-drag inline-flex h-[24px] items-center rounded-[7px] bg-fg px-2 text-[11.5px] font-medium text-ink-0 transition-opacity hover:opacity-85 disabled:opacity-25"
+        className="no-drag inline-flex h-[24px] items-center rounded-[7px] bg-fg px-2 text-[11.5px] font-medium text-ink-0 transition-opacity hover:opacity-88 disabled:opacity-30"
       >
         Add
       </button>
@@ -141,8 +141,8 @@ function Chip({
         'no-drag inline-flex h-[24px] items-center gap-1 rounded-[7px] border px-2',
         'text-[11.5px] transition-colors',
         on
-          ? 'border-line-2 bg-white/[0.06] text-fg'
-          : 'border-line text-fg-3 hover:border-line-2 hover:bg-white/[0.04] hover:text-fg-2'
+          ? 'border-line-2 bg-veil-2 text-fg'
+          : 'border-line text-fg-3 hover:border-line-2 hover:bg-veil hover:text-fg-2'
       )}
     >
       {children}

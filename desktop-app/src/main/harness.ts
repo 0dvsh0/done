@@ -3,7 +3,7 @@ import { Store } from './agent'
 import { tracing } from './integrations'
 import { hydrateEnv } from './env'
 import { TOOLS } from './tools'
-import { llmStatus } from './llm'
+import { llmStatus, discoverModels } from './llm'
 
 /* ==========================================================================
    The harness.
@@ -48,9 +48,14 @@ let turn = 0
 const answered = new Set<string>()
 
 async function main(): Promise<void> {
+  // Settle the brain pool against this key's real catalogue before the first
+  // call, so the line below names a model that can actually serve.
+  await discoverModels()
+
   const status = llmStatus()
   log(`\n  model   ${status.model}${status.connected ? '' : '   (NOT CONNECTED)'}`)
   log(`  guard   ${status.guard}`)
+  log(`  pool    ${status.brains.map((b) => `${b.id}${b.ready ? '' : ` (${b.reason})`}`).join(' → ')}`)
   log(`  tools   ${TOOLS.length} real tools`)
   log(`  goal    ${goal}\n`)
 
@@ -81,9 +86,15 @@ async function main(): Promise<void> {
 
   const task = store.createTask(goal)
 
+  let lastLine = ''
   store.onChange(() => {
     const current = store.byId(task.id)
     if (!current) return
+
+    if (current.line && current.line !== lastLine) {
+      lastLine = current.line
+      log(`  LINE   ${current.line}`)
+    }
 
     // Each ask is answered exactly once, keyed by its id. Without this the
     // handler fires again on the very bump that the answer caused, sees the

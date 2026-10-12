@@ -1,13 +1,20 @@
 import type { AgentConnector, ConnectorContext, ConnectorResult } from './types'
 import type { ConnectorInfo } from '../../shared/types'
-import { createPiModels, getPiModel } from '../pi'
+import { runAgentLoop, type Persona } from './loop'
 
+/**
+ * Claude — engineering.
+ *
+ * Reads the codebase before editing it, edits for real, and re-reads what it
+ * wrote. The persona is a discipline, not a costume: it is the one that
+ * refuses to call code done until it has run.
+ */
 export class ClaudeConnector implements AgentConnector {
   id = 'claude' as const
-  name = 'Claude & Claude Code'
-  blurb = 'Web, desktop, phone and terminal. Leading coding, agentic refactoring and terminal commands.'
+  name = 'Claude'
+  blurb = 'Reads the codebase, makes the change for real, then runs it.'
   category = 'code' as const
-  badge = '✻ Claude'
+  badge = 'Claude'
   icon = 'claude'
 
   private customKey: string | null = null
@@ -37,116 +44,28 @@ export class ClaudeConnector implements AgentConnector {
       icon: this.icon,
       connected: this.isConfigured(),
       description:
-        'Claude Code is Anthropic’s flagship agentic coding tool for the terminal. It excels at multi-file architecture, codebase refactoring, precision edits, and terminal execution.',
+        'Software engineering across a real filesystem and a real shell. Reads before it writes, and runs the code after so the result is evidence rather than a claim.',
       endpoint: this.customEndpoint || 'https://api.anthropic.com/v1',
       requiresKey: 'ANTHROPIC_API_KEY'
     }
   }
 
-  async execute(prompt: string, ctx: ConnectorContext): Promise<ConnectorResult> {
-    ctx.setTaskLine('✻ [Claude Code] Initializing codebase workspace...')
-    ctx.setTaskProgress(0.15)
-
-    // Execute with high precision coding loop
-    const models = createPiModels()
-    const model = getPiModel()
-
-    let accumulated = ''
-    try {
-      ctx.setTaskLine('✻ [Claude Code] Designing architecture and implementation...')
-      const responseStream = models.streamSimple(
-        model,
-        {
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: [
-                    `You are Claude Code by Anthropic, running in Done as a connected coding agent.`,
-                    `Your specialty: High precision code engineering, terminal workflows, clean syntax, comprehensive error handling, and unit test verification.`,
-                    '',
-                    `Task: ${prompt}`,
-                    '',
-                    `If this task requires writing or editing code:`,
-                    `1. Describe the precise file changes.`,
-                    `2. Output the exact code cleanly with filenames.`,
-                    `3. Provide instructions or run commands if applicable.`,
-                    `Be concise, exact, and rigorous.`
-                  ].join('\n')
-                }
-              ],
-              timestamp: Date.now()
-            }
-          ]
-        },
-        { maxRetries: 3 }
-      )
-
-      for await (const chunk of responseStream) {
-        if (chunk.type === 'text_delta') {
-          accumulated += chunk.delta
-          const lastLine = accumulated.trim().split('\n').filter(Boolean).pop() ?? ''
-          if (lastLine) {
-            ctx.setTaskLine(`✻ [Claude Code] ${lastLine.slice(0, 110)}`)
-          }
-        }
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      throw new Error(`Claude Code execution error: ${msg}`)
+  execute(prompt: string, ctx: ConnectorContext): Promise<ConnectorResult> {
+    const persona: Persona = {
+      opening: 'Reading the code first.',
+      identity: [
+        'You are Claude, the engineering side of this app.',
+        'You would rather show working code than describe it.'
+      ],
+      craft: [
+        'Read the surrounding files before changing anything. Match the style that is already there.',
+        'Make the edit with the file tools, then read it back to confirm it landed.',
+        'Run it — tests, a script, a command — and report the real output.',
+        'Never paste a diff in chat when you could write the file.'
+      ],
+      maxTurns: 14,
+      engine: 'claude'
     }
-
-    ctx.setTaskProgress(0.7)
-
-    // Check if the response generated code files to write
-    const codeBlockMatch = accumulated.match(/```(?:[a-zA-Z0-9_-]+)?\s*(?:\/\/\s*|#\s*)?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)\n([\s\S]*?)```/)
-    const createdFiles: string[] = []
-
-    if (codeBlockMatch) {
-      const fileName = codeBlockMatch[1]
-      const fileCode = codeBlockMatch[2]
-      try {
-        ctx.setTaskLine(`✻ [Claude Code] Writing ${fileName}...`)
-        const writeRes = await ctx.executeLocalTool('file_write', {
-          path: fileName,
-          content: fileCode
-        })
-        if (writeRes.ok) {
-          createdFiles.push(fileName)
-          ctx.setTaskLine(`✻ [Claude Code] Wrote ${fileName} successfully.`)
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-
-    ctx.setTaskProgress(0.95)
-    ctx.pushHistory({
-      tool: 'claude_code',
-      ok: true,
-      summary: `Claude Code completed: ${prompt.slice(0, 80)}`,
-      detail: accumulated,
-      args: createdFiles.length ? `files=[${createdFiles.join(', ')}]` : 'code_agent'
-    })
-
-    const firstSummary = accumulated.split('\n').filter(Boolean)[0] || 'Claude Code implementation ready.'
-
-    return {
-      ok: true,
-      summary: firstSummary.slice(0, 160),
-      detail: accumulated,
-      outputFiles: createdFiles,
-      receiptDraft: {
-        lines: [
-          ['Connected Agent', 'Claude Code (Anthropic)'],
-          ['Files Modified', createdFiles.length ? createdFiles.join(', ') : 'In-memory implementation'],
-          ['Verification', 'Syntax & type checked']
-        ],
-        proof: createdFiles.length ? createdFiles : ['claude.ai/code', 'clean architecture'],
-        undo: createdFiles.length ? `Delete ${createdFiles.join(', ')}` : null
-      }
-    }
+    return runAgentLoop(persona, ctx, prompt)
   }
 }

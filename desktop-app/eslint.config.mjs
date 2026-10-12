@@ -28,5 +28,19 @@ export default defineConfig(
       ...eslintPluginReactRefresh.configs.vite.rules
     }
   },
+  {
+    /*
+     * Electron's main process loads a bare `.js` file as CommonJS, so the
+     * screenshot script has to be `require`/CJS and cannot be typed. Linting it
+     * as if it were app source produces five errors about a file that is
+     * tooling, not product — and silencing them file-by-file is how a real
+     * rule gets quietly turned off.
+     */
+    files: ['scripts/**/*.js'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off'
+    }
+  },
   eslintConfigPrettier
 )

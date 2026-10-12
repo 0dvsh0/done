@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { app } from 'electron'
 import type {
   AppState,
   Ask,
@@ -13,18 +14,10 @@ import type {
   TaskState
 } from '../shared/types'
 import { entire, tracing, type Step } from './integrations'
-import { llmStatus, withRetry, zeroUsage, type Usage } from './llm'
-import {
-  catalogueText,
-  describeArgs,
-  TOOLS,
-  TOOLS_BY_NAME,
-  type Tool,
-  type ToolContext
-} from './tools'
+import { llmStatus, shortModel, withRetry, zeroUsage, type Usage } from './llm'
+import { describeArgs, TOOLS_BY_NAME, type Tool, type ToolContext } from './tools'
 import { shutdownBrowser } from './tools/browser'
-import { Agent } from '@earendil-works/pi-agent-core'
-import { createPiModels, getPiModel, adaptToolToPi } from './pi'
+import type { Agent } from '@earendil-works/pi-agent-core'
 import {
   getConnector,
   getConnectorList,
@@ -51,9 +44,6 @@ import type { ConnectorId } from '../shared/types'
      3. The cost of a run is real and is shown, and it can be capped.
      4. Anything read off the web is screened for prompt injection first.
    ========================================================================== */
-
-/** Longest the agent will chase a single goal before handing back control. */
-const MAX_TURNS = 10
 
 /** Roughly what the next model call costs, used for the spend guard. */
 const ESTIMATE_NEXT_CALL = 0.004
@@ -666,7 +656,8 @@ export class Store {
       if (!t || typeof t !== 'object') return false
       if (t.id && String(t.id).startsWith('seed')) return false
       if (LEGACY_DUMMY_TITLES.has(t.title)) return false
-      if (Array.isArray(t.story) && t.story.some((s) => String(s?.id).startsWith('seed'))) return false
+      if (Array.isArray(t.story) && t.story.some((s) => String(s?.id).startsWith('seed')))
+        return false
       return true
     })
 
@@ -685,6 +676,42 @@ export class Store {
 
     for (const t of this.tasks) {
       t.group = cleanGroup(t.group)
+
+      // A task can be waiting on you, or it can only look like it is.
+      //
+      // "Needs you" without a question attached is not a task waiting for an
+      // answer — there is nothing to click. Runs used to end up in exactly
+      // that state, and on restart they stayed there forever, because the only
+      // way out was the button that was not being shown. Rather than restore
+      // the deadlock, these go back in the queue and actually run.
+      if (t.state === 'needs' && !t.ask) {
+        t.state = 'waiting'
+        t.progress = 0
+        t.beatIdx = 0
+        t.planIdx = -1
+        t.ask = null
+        t.line = 'Picking this back up.'
+        this.say(t, 'This one got stuck last time. Starting it again.', '')
+      }
+
+      // A finished task whose line is a raw provider error is a historical
+      // record of something that went wrong, not a sentence anyone wrote. Left
+      // as-is it puts four hundred characters of JSON into a list row, which
+      // is most of what makes a saved list look broken. The meaning is
+      // preserved; only the shape changes.
+      //
+      // The line is matched on the error inside it, not on its own shape —
+      // the worst of these read `Agent stopped: 429: {"message":…`, which does
+      // not begin with a brace.
+      if (t.finishedAt && t.line && hasProviderError(t.line)) {
+        const cleaned = explain(t.line)
+        if (cleaned && cleaned !== t.line) {
+          t.line = cleaned
+          const last = t.story[t.story.length - 1]
+          if (last?.text === t.line) last.text = cleaned
+        }
+      }
+
       if (isLive(t.state)) {
         t.state = this.allPaused ? 'paused' : t.state
         this.launch(t)
@@ -732,12 +759,15 @@ class Runner {
   readonly gate = new Gate()
   private askWaiter: Deferred | null = null
   private askValue: string | null = null
-  private piAgent: Agent | null = null
   private history: Observed[] = []
   private spent = 0
   private spendAsked = false
+  /** The engine currently running, so a steer can reach it mid-flight. */
+  private liveAgent: Agent | null = null
   private signal = new AbortController()
   private stopReason: string | null = null
+  /** The model that actually ran, so the receipt can name it rather than assume. */
+  private engineModel: string | null = null
   private customReceiptDraft: {
     lines: [string, string][]
     proof: string[]
@@ -797,13 +827,11 @@ class Runner {
 
   steer(text: string): void {
     this.task.notes.push(text)
-    if (this.piAgent) {
-      this.piAgent.steer({
-        role: 'user',
-        content: [{ type: 'text', text }],
-        timestamp: Date.now()
-      })
-    }
+    this.liveAgent?.steer({
+      role: 'user',
+      content: [{ type: 'text', text }],
+      timestamp: Date.now()
+    })
   }
 
   /* ------------------------------------------------------------------- run */
@@ -825,13 +853,13 @@ class Runner {
       if (this.gate.isStopped) return
 
       t.state = 'working'
-      t.line = 'Assessing task context & selecting optimal connector...'
+      t.line = 'Starting on it.'
       store.say(t, t.line, '')
       store.bump()
 
-      // 1. ROUTING PHASE (Our LLM acts as the intelligent router & dispatcher)
-      const rootPath = (store as unknown as { context?: { root?: string } }).context?.root || process.cwd()
-      const routeDecision = await routeTask(t, step, rootPath)
+      // 1. Pick the engine. This is bookkeeping: it happens here, instantly,
+      //    rather than as a model call that could fail before any work began.
+      const routeDecision = routeTask(t, step, rootPath())
 
       t.routedConnector = routeDecision.connector
       t.routingReason = routeDecision.reason
@@ -841,26 +869,25 @@ class Runner {
 
       const connector = getConnector(routeDecision.connector)
 
-      // Record dispatch span to neatlogs
       const routeSpan = await step(
         {
-          kind: 'LLM',
-          name: 'router.dispatch',
+          kind: 'CHAIN',
+          name: 'dispatch',
           input: clip(t.title, 80),
-          output: `Routed to ${connector.name}: ${routeDecision.reason}`
+          output: `${connector.name} · ${routeDecision.reason}`
         },
-        async () => 'ok'
+        async () => routeDecision.connector
       )
       store.addSpans(t.id, [routeSpan])
 
-      t.line = `${connector.badge}: ${routeDecision.reason}`
+      t.line = routeDecision.reason
       store.say(t, t.line, '', routeSpan)
       store.bump()
 
       await this.gate.hold()
       if (this.gate.isStopped) return
 
-      // 2. CONNECTOR EXECUTION (Delegated to specialized agent connector)
+      // 2. Hand it to the engine, which carries the real tools.
       const connectorCtx: ConnectorContext = {
         task: t,
         step,
@@ -871,6 +898,7 @@ class Runner {
         askPermission: (tool, args) => this.askPermission(step, tool, args),
         charge: (u) => this.charge(u, store),
         pushHistory: (entry) => this.history.push(entry),
+        addSpans: (spans) => store.addSpans(t.id, spans),
         executeLocalTool: async (toolName, args) => {
           const tool = TOOLS_BY_NAME.get(toolName)
           if (!tool) throw new Error(`Tool ${toolName} not found`)
@@ -884,312 +912,71 @@ class Runner {
         setTaskProgress: (p) => {
           t.progress = p
           store.bump()
+        },
+        onHandover: (from, to, detail) => {
+          void this.handover(step, store, from, to, detail)
+        },
+        setLiveAgent: (agent) => {
+          this.liveAgent = agent
         }
       }
 
-      let res
+      let res: Awaited<ReturnType<typeof connector.execute>>
       try {
         res = await connector.execute(routeDecision.enrichedPrompt, connectorCtx)
       } catch (err: unknown) {
         if (this.gate.isStopped) return
-        this.stopReason = `Connector stopped: ${messageOf(err)}`
-        await this.handBack(store)
+        await this.handBack(store, messageOf(err))
         return
       }
 
       if (this.gate.isStopped) return
 
-      if (res.ok) {
-        if (res.receiptDraft) {
-          this.customReceiptDraft = res.receiptDraft
-        }
-        await this.finish(step)
-      } else {
-        this.stopReason = res.summary || 'Task could not be completed.'
-        await this.handBack(store)
+      if (!res.ok) {
+        await this.handBack(store, res.summary)
+        return
       }
+
+      // The engine ran to the end of its turns. Whether that met the goal is a
+      // separate question, answered by the verification pass below — the
+      // engine's own say-so is not evidence.
+      this.pendingFinish = true
+      this.engineModel = res.model ?? null
+      if (res.receiptDraft) this.customReceiptDraft = res.receiptDraft
+      await this.finish(step)
     })
 
     store.bump()
   }
 
-  /** Honest failure path: say what is missing rather than pretending. */
-  private async handBack(store: Store): Promise<void> {
+  /**
+   * Honest failure path: say what is missing rather than pretending.
+   *
+   * The message is cleaned before it is shown. A provider quota error arrives
+   * as a paragraph of raw JSON, and dropping that onto a task card as though a
+   * person had written it is both ugly and unreadable.
+   */
+  private async handBack(store: Store, raw?: string): Promise<void> {
     const t = this.task
+    const line = explain(raw) || 'It could not finish this one.'
     t.state = 'stopped'
     t.finishedAt = Date.now()
-    t.line = this.stopReason ?? 'I could not finish this one.'
-    store.say(t, t.line, 'snag')
+    t.line = line
+    store.say(t, line, 'snag')
     store.bump()
   }
 
-  /* ----------------------------------------------------------------- plan */
-
-  protected async _plan(step: Step): Promise<string[] | null> {
-    const store = this.store
-    const t = this.task
-
-    t.state = 'working'
-    t.line = 'Working out what this actually needs.'
-    store.say(t, t.line, '')
-    store.bump()
-
-    let result
-    try {
-      result = await this.ask<{ summary: string; steps: string[] }>(
-        step,
-        'plan',
-        {
-          type: 'object',
-          properties: {
-            summary: {
-              type: 'string',
-              description: 'One plain sentence: what you are about to do.'
-            },
-            steps: {
-              type: 'array',
-              description: 'Three to six concrete steps, each starting with a verb.',
-              items: { type: 'string' }
-            }
-          },
-          required: ['summary', 'steps'],
-          additionalProperties: false
-        },
-        [
-          `You are the agent inside Done., a desktop to-do app. You will be given a goal and you will finish it yourself using tools.`,
-          '',
-          `Your goal: ${t.title}`,
-          t.when ? `It is needed by: ${t.when}` : '',
-          t.budget ? `Budget: ${t.budget}` : '',
-          // Everything the user has added along the way, including from a run
-          // that was revived after getting stuck.
-          t.notes.length
-            ? `What the user has told you so far:\n${t.notes.map((n) => `- ${n}`).join('\n')}`
-            : '',
-          '',
-          'The tools you can use:',
-          catalogueText(TOOLS),
-          '',
-          'Write the shortest honest plan. Use tools for everything — you cannot do anything',
-          'yourself. If the goal needs a decision only the user can make, say so in the summary',
-          'and plan to bring them options rather than guessing.'
-        ]
-          .filter(Boolean)
-          .join('\n')
-      )
-    } catch (err) {
-      this.stopReason = `I could not plan this: ${messageOf(err)}`
-      return null
-    }
-
-    const steps = (result.value.steps ?? [])
-      .slice(0, 6)
-      .map((s) => String(s).trim())
-      .filter(Boolean)
-    if (!steps.length) return ['Get started']
-
-    t.plan = steps
-    t.planIdx = 0
-    t.beatsTotal = steps.length
-    t.line = result.value.summary || steps[0]
-    store.say(t, t.line, '', result.span)
-    this.charge(result.usage, store)
-    store.bump()
-
-    return steps
-  }
-
+  /**
+   * Whether the engine ran to the end of its turns.
+   *
+   * This used to be set inside a second, hand-rolled agent loop that the
+   * connector work had orphaned but never deleted. Nothing ever reached that
+   * loop, so this stayed false forever, and the verification pass below read
+   * it as "the agent got stuck" and parked every single task on "needs you" —
+   * with no question attached, and nothing that would ever clear it. The loop
+   * is gone and this is now set where the work actually happens.
+   */
   private pendingFinish = false
-
-  /* ----------------------------------------------------------------- loop */
-
-  protected async _loop(step: Step): Promise<'finished' | 'stopped'> {
-    const store = this.store
-    const t = this.task
-
-    const models = createPiModels()
-    const model = getPiModel()
-
-    const piTools = TOOLS.map((tool) =>
-      adaptToolToPi(tool, () => this.context, {
-        executeOverride: async (tl, args) => {
-          await this.gate.hold()
-          if (this.gate.isStopped) throw new Error('Task stopped by user')
-          const outcome = await this.execute(step, tl, args)
-          return { ok: outcome.ok, output: outcome.output, data: outcome.data }
-        }
-      })
-    )
-
-    let turnCount = 0
-
-    this.piAgent = new Agent({
-      streamFn: (m, ctx, opts) =>
-        models.streamSimple(m, ctx, {
-          ...opts,
-          maxRetries: 5,
-          maxRetryDelayMs: 60000
-        }),
-      maxRetryDelayMs: 60000,
-      initialState: {
-        model,
-        systemPrompt: [
-          `You are Pi Agent inside Done., an autonomous desktop AI assistant inspired by Grok Bot, Muse Spark, and GPT Dots.`,
-          `You have 19 real local tools (web search, headless browser, filesystem, shell execution, clipboard, system info, code delegation).`,
-          `RULE: Whenever a task requires taking action, searching, reading, writing files, or checking the system, YOU MUST CALL YOUR TOOLS directly.`,
-          `Do NOT merely reply with text describing what you would do. Execute the necessary tool calls (e.g. web_search, file_write, shell_run, system_info) to perform the real work.`,
-          `Be concise, direct, and completely honest. Never fabricate results.`
-        ].join('\n'),
-        tools: piTools
-      },
-      finishTurn: () => {
-        turnCount++
-        if (turnCount >= MAX_TURNS) {
-          this.stopReason = `Reached maximum turns limit (${MAX_TURNS}).`
-          return { action: 'end' }
-        }
-        return undefined
-      },
-      beforeToolCall: async ({ toolCall, args }) => {
-        await this.gate.hold()
-        if (this.gate.isStopped) {
-          return { block: true, terminate: true, reason: 'Task stopped by user' }
-        }
-
-        const tool = TOOLS_BY_NAME.get(toolCall.name)
-        if (tool && tool.irreversible) {
-          const verdict = await this.askPermission(step, tool, (args ?? {}) as Record<string, unknown>)
-          if (this.gate.isStopped || !verdict.approved) {
-            return { block: true, reason: 'User declined permission for this action.' }
-          }
-        }
-
-        if (!(await this.checkSpend())) {
-          if (this.gate.isStopped) {
-            return { block: true, terminate: true, reason: 'Task stopped by user' }
-          }
-          return { block: true, terminate: true, reason: 'Spend budget reached; stopped per user limit.' }
-        }
-
-        return undefined
-      }
-    })
-
-    let accumulatedThinking = ''
-    let accumulatedText = ''
-
-    this.piAgent.subscribe(async (event) => {
-      if (event.type === 'message_update') {
-        const assistantEvt = event.assistantMessageEvent
-        if (assistantEvt.type === 'thinking_delta') {
-          accumulatedThinking += assistantEvt.delta
-          const latestThought = accumulatedThinking.trim().split('\n').filter(Boolean).pop() ?? ''
-          if (latestThought) {
-            t.line = `Thinking: ${clip(latestThought, 110)}`
-            store.bump()
-          }
-        } else if (assistantEvt.type === 'text_delta') {
-          accumulatedText += assistantEvt.delta
-          const latestLine = accumulatedText.trim().split('\n').filter(Boolean).pop() ?? ''
-          if (latestLine) {
-            t.line = clip(latestLine, 120)
-            store.bump()
-          }
-        }
-      } else if (event.type === 'tool_execution_start') {
-        t.state = 'working'
-        t.line = `Running ${event.toolName}...`
-        store.bump()
-      } else if (event.type === 'tool_execution_end') {
-        accumulatedThinking = ''
-        accumulatedText = ''
-        t.progress = Math.min(0.95, t.progress + 0.1)
-        store.bump()
-      } else if (event.type === 'turn_end') {
-        const msg = event.message as {
-          content?: Array<{ type?: string; text?: string }>
-          usage?: { input?: number; output?: number; reasoning?: number; cost?: number | { total?: number } }
-        }
-        if (msg?.content && Array.isArray(msg.content)) {
-          const textItem = msg.content.find((c) => c.type === 'text')
-          const hasToolCalls = msg.content.some((c) => c.type === 'toolCall')
-          if (textItem?.text && !hasToolCalls) {
-            store.say(t, clip(textItem.text, 160), '')
-          }
-        }
-        if (msg?.usage) {
-          const costVal = typeof msg.usage.cost === 'number' ? msg.usage.cost : (msg.usage.cost?.total ?? 0)
-          const u: Usage = {
-            input: msg.usage.input ?? 0,
-            output: msg.usage.output ?? 0,
-            reasoning: msg.usage.reasoning ?? 0,
-            cost: costVal
-          }
-          this.charge(u, store)
-          const llmSpan = await step(
-            {
-              kind: 'LLM',
-              name: 'pi_turn',
-              input: clip(t.title, 60),
-              output: `Tokens: ${u.input} in, ${u.output} out`,
-              cost: u.cost,
-              tokens: [u.input, u.output]
-            },
-            async () => 'ok'
-          )
-          store.addSpans(t.id, [llmSpan])
-          store.bump()
-        }
-      }
-    })
-
-    const promptText = [
-      `Task Goal: ${t.title}`,
-      t.when ? `Deadline: ${t.when}` : '',
-      t.budget ? `Budget: ${t.budget}` : '',
-      t.notes.length ? `User Notes:\n${t.notes.map((n) => `- ${n}`).join('\n')}` : '',
-      '',
-      `Execute the necessary tools now to accomplish this goal.`
-    ]
-      .filter(Boolean)
-      .join('\n')
-
-    try {
-      await this.piAgent.prompt(promptText)
-    } catch (err) {
-      if (this.gate.isStopped) return 'stopped'
-      this.stopReason = `Agent stopped: ${messageOf(err)}`
-      return 'stopped'
-    }
-
-    if (this.gate.isStopped) return 'stopped'
-
-    if (this.piAgent.state.errorMessage) {
-      this.stopReason = `Agent stopped: ${this.piAgent.state.errorMessage}`
-      return 'stopped'
-    }
-
-    // Capture the final assistant message into history if no tools were called
-    const lastAssistant = this.piAgent.state.messages
-      .filter((m) => m.role === 'assistant')
-      .pop() as { content?: Array<{ type?: string; text?: string }> } | undefined
-    if (lastAssistant?.content) {
-      const textBlock = lastAssistant.content.find((c) => c.type === 'text')
-      if (textBlock?.text && !this.history.length) {
-        this.history.push({
-          tool: 'pi_agent',
-          ok: true,
-          summary: clip(textBlock.text, 160),
-          detail: textBlock.text,
-          args: ''
-        })
-      }
-    }
-
-    this.pendingFinish = true
-    return 'finished'
-  }
-
   /* ------------------------------------------------------------ guardrail */
 
   /**
@@ -1379,6 +1166,47 @@ class Runner {
     return true
   }
 
+  /**
+   * The run moved to another model mid-flight.
+   *
+   * This is the one moment in the app where the thing doing the thinking
+   * changes underneath you, so it gets the same treatment as anything else
+   * irreversible: a real span, a real sentence, and the run carries on. The
+   * alternative — carrying on quietly — would mean a receipt naming weights
+   * that did not finish the work.
+   */
+  private async handover(
+    step: Step,
+    store: Store,
+    from: string,
+    to: string,
+    detail: string
+  ): Promise<void> {
+    const t = this.task
+    const line = `${shortModel(from)} ran out of tokens for the day. Carrying on with ${shortModel(to)}.`
+    const span = await step(
+      {
+        kind: 'CHAIN',
+        name: 'model_handover',
+        input: `${shortModel(from)} → ${shortModel(to)}`,
+        output: line,
+        status: 'recovered'
+      },
+      // The callback's return value replaces `output`, so it returns the
+      // sentence rather than a status word — otherwise the span in the trace
+      // sheet reads "carried on" and the reason lives nowhere.
+      async () => line
+    )
+    store.addSpans(t.id, [span])
+    this.engineModel = to
+    t.line = line
+    store.say(t, line, '', span)
+    store.bump()
+    if (process.env.DONE_DEBUG) {
+      process.stderr.write(`──── handover → ${shortModel(to)} (${detail.slice(0, 120)})\n`)
+    }
+  }
+
   /* -------------------------------------------------------------- execute */
 
   private async execute(
@@ -1392,7 +1220,12 @@ class Runner {
     // A holder, not a bare variable: the value is written inside the traced
     // callback and read after it, which the compiler cannot narrow.
     const captured: {
-      result?: { ok: boolean; output: string; data: unknown; guard?: { safe: boolean; score: number; reason: string } }
+      result?: {
+        ok: boolean
+        output: string
+        data: unknown
+        guard?: { safe: boolean; score: number; reason: string }
+      }
     } = {}
 
     const span = await step(
@@ -1425,6 +1258,17 @@ class Runner {
       detail: renderEvidence(captured.result?.data, captured.result?.guard),
       args: input
     })
+
+    // The plan is what the agent did, not what it meant to do. A placeholder
+    // written before the work started ("Work out what this needs / Do it /
+    // Check it") says nothing once the run is over, and it sits in the detail
+    // pane looking authoritative the whole time. Repeats of the same call
+    // collapse into one line, so the list stays a list.
+    if (t.plan.at(-1) !== line) {
+      t.plan.push(line)
+      t.beatsTotal = t.plan.length
+    }
+    t.planIdx = t.plan.length
 
     store.say(t, line, span.status === 'error' ? 'snag' : '', span)
     t.state = span.status === 'error' ? 'snag' : 'working'
@@ -1520,29 +1364,57 @@ class Runner {
         [
           `Goal: ${t.title}`,
           '',
-          `Plan:`,
-          t.plan.map((s, i) => `  ${i + 1}. ${s}`).join('\n'),
-          '',
-          'What actually happened:',
-          this.history
-            .slice(-HISTORY_WINDOW)
-            .map((h) => `${h.tool}(${h.args}) → ${h.ok ? 'ok' : 'FAILED'}\n${indent(h.detail)}`)
-            .join('\n\n'),
+          this.history.length
+            ? 'What actually happened:'
+            : 'What actually happened: nothing. No tool was run in this task.',
+          ...(this.history.length
+            ? [
+                this.history
+                  .slice(-HISTORY_WINDOW)
+                  .map(
+                    (h) => `${h.tool}(${h.args}) → ${h.ok ? 'ok' : 'FAILED'}\n${indent(h.detail)}`
+                  )
+                  .join('\n\n')
+              ]
+            : []),
           '',
           `This run cost ${money(this.spent)}.`,
           '',
           'Check the evidence against the goal. If it is not met, say verified=false and',
           'explain honestly in the verification field what is missing. Do not soften a failure.',
           'Every proof entry must be a real artefact from the evidence above — not a description',
-          'of one.'
+          'of one.',
+          '',
+          'A goal that only ever needed thinking, with no action to take, is met when the',
+          'answer itself is the deliverable. A goal that asked for something to change on this',
+          'machine or the web is not met unless a tool result above shows it changed.'
         ].join('\n')
       )
       draft = result.value
       this.charge(result.usage, store)
     } catch (err) {
-      this.stopReason = `I could not check my own work: ${messageOf(err)}`
-      this.pendingFinish = false
-      await this.finish(step)
+      // The check itself failed — the provider is down, or the quota ran out
+      // mid-verification. That is not the task failing, so it does not go
+      // through the "blocked" branch or call itself again: it says what
+      // happened and stops.
+      const line = explain(messageOf(err)) || 'I could not check my own work.'
+      const span = await step(
+        {
+          kind: 'GUARDRAIL',
+          name: 'verify',
+          input: `check="${clip(t.title, 50)}"`,
+          output: 'the check could not run',
+          status: 'error',
+          error: line
+        },
+        async () => line
+      )
+      store.addSpans(t.id, [span])
+      t.state = 'snag'
+      t.finishedAt = Date.now()
+      t.line = line
+      store.say(t, line, 'snag', span)
+      store.bump()
       return
     }
 
@@ -1563,7 +1435,7 @@ class Runner {
       // Not done. Report that honestly and stop, rather than claiming success.
       t.state = 'snag'
       t.finishedAt = Date.now()
-      t.line = clip(draft.verification, 180) || 'I could not confirm this worked.'
+      t.line = plainSentence(draft.verification) || 'I could not confirm this worked.'
       store.say(t, t.line, 'snag', span)
       store.bump()
       return
@@ -1575,6 +1447,13 @@ class Runner {
           ...draft.lines.slice(0, 2).map((l) => [l.label, l.value] as [string, string])
         ].slice(0, 4)
       : draft.lines.slice(0, 4).map((l) => [l.label, l.value] as [string, string])
+
+    // The receipt says which model did the work. It is the one claim in here
+    // the user cannot check from the row above it, and it is the one that
+    // matters when a task lands on an engine other than the one named.
+    if (this.engineModel && !finalLines.some(([k]) => /ran on|model/i.test(k))) {
+      finalLines.unshift(['Ran on', this.engineModel])
+    }
 
     const receipt: Receipt = {
       lines: finalLines,
@@ -1598,7 +1477,7 @@ class Runner {
     t.state = 'done'
     t.progress = 1
     t.planIdx = t.plan.length
-    t.line = draft.headline || 'Done.'
+    t.line = plainSentence(draft.headline, 140) || 'Done.'
     t.receipt = receipt
     t.finishedAt = Date.now()
     t.settleUntil = Date.now() + 2400
@@ -1674,7 +1553,8 @@ class Runner {
   }
 
   dispose(): void {
-    this.piAgent?.abort()
+    this.liveAgent?.abort()
+    this.liveAgent = null
     this.signal.abort()
   }
 }
@@ -1685,6 +1565,96 @@ class Runner {
 
 const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
+/** Where the agent works, so "the current project" means something concrete. */
+function rootPath(): string {
+  try {
+    return app.getAppPath()
+  } catch {
+    return process.cwd()
+  }
+}
+
+/* ==========================================================================
+   Provider errors, said in a sentence.
+
+   A rate limit does not arrive as "rate limit". It arrives as four hundred
+   characters of JSON with a quota number buried in it. Dropping that onto a
+   task card — as the previous version did, verbatim, under a row somebody is
+   trying to read — makes the app look broken at exactly the moment it most
+   needs to look calm.
+
+   What this must never do is invent a cause. A message it cannot recognise is
+   passed through on one line, not rewritten into something tidier-sounding
+   and wrong.
+   ========================================================================== */
+
+function explain(raw?: string | null): string {
+  const text = String(raw ?? '').trim()
+  if (!text) return ''
+
+  if (/rate[_ ]limit|too many requests|\b429\b/i.test(text)) {
+    if (/tokens per day|\bTPD\b/i.test(text)) {
+      const until = prettyDuration(/try again in ([\d.hms ]+)/i.exec(text)?.[1])
+      return until
+        ? `I hit the model's daily token limit. It resets in about ${until} — nothing was left half-finished.`
+        : "I hit the model's daily token limit. Nothing was left half-finished; it will pick up once the limit resets."
+    }
+    if (/tokens per minute|\bTPM\b/i.test(text)) {
+      return 'I sent the model more than it takes in one minute. Worth retrying in a moment.'
+    }
+    return 'The model is rate-limiting me right now. Nothing was changed.'
+  }
+
+  if (/context[_ ]length|too many tokens|maximum context|\b413\b/i.test(text)) {
+    return 'This needed more context than the model takes in one go. Worth splitting into smaller pieces.'
+  }
+
+  const parsed = safeJson(text)
+  const message = parsed?.message ?? (typeof parsed?.error === 'string' ? parsed.error : undefined)
+  if (typeof message === 'string' && message.length < 240) return clip(message, 200)
+
+  // Nothing recognised — say what came back, on one line.
+  return clip(text, 200)
+}
+
+/**
+ * Groq writes durations as "30m29.088s". Shown to a person that is a puzzle,
+ * and this string ends up on a task card, so it is turned into words.
+ */
+function prettyDuration(raw?: string): string {
+  const t = String(raw ?? '').trim()
+  if (!t) return ''
+  const h = /(\d+(?:\.\d+)?)h/.exec(t)?.[1]
+  const m = /(\d+(?:\.\d+)?)m/.exec(t)?.[1]
+  const s = /(\d+(?:\.\d+)?)s/.exec(t)?.[1]
+  const parts: string[] = []
+  if (h) parts.push(`${Math.round(Number(h))} hour${Math.round(Number(h)) === 1 ? '' : 's'}`)
+  if (m) parts.push(`${Math.round(Number(m))} min`)
+  if (!h && !m && s) parts.push(`${Math.max(1, Math.round(Number(s)))} sec`)
+  return parts.join(' ')
+}
+
+/** True when a line is a provider's raw complaint rather than a sentence. */
+function hasProviderError(text: string): boolean {
+  const t = String(text ?? '')
+  return (
+    /rate[_ ]limit|too many requests|\b429\b|context[_ ]length exceeded|maximum context|\b413\b/i.test(
+      t
+    ) &&
+    (t.includes('{') || t.length > 160)
+  )
+}
+
+function safeJson(text: string): { message?: string; error?: unknown } | null {
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start === -1 || end <= start) return null
+  try {
+    return JSON.parse(text.slice(start, end + 1)) as { message?: string }
+  } catch {
+    return null
+  }
+}
 
 /** Collapses to one line — for labels, headlines, anything drawn in a row. */
 const clip = (s: string, n: number): string => {
@@ -1692,6 +1662,42 @@ const clip = (s: string, n: number): string => {
     .replace(/\s+/g, ' ')
     .trim()
   return t.length > n ? `${t.slice(0, n - 1)}…` : t
+}
+
+/**
+ * Strips the formatting a model writes for a terminal, not for a list row.
+ *
+ * The story is set in small type on a dark surface, and it read like this:
+ *
+ *   **How to change the Privacy Policy URL** 1. **Open Play Console** - Go to
+ *
+ * Bold markers, list numbering, bullet glyphs and inline code fences are the
+ * model's habits, not content. Left in, they turn a calm sentence into
+ * something that looks like a scraped document — which is most of what made
+ * this list stop looking like it belonged to the app around it.
+ *
+ * It also drops a leading heading, because the title is already right above
+ * the sentence, and a second one is only a second thing to read.
+ */
+const plainSentence = (s: string, n = 180): string => {
+  const text = String(s ?? '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1$2')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+[.)]\s+/gm, '')
+    .replace(/\s*[-–—]\s*>\s*/g, ' — ')
+    .replace(/[ \t]+/g, ' ')
+
+  // Drop a leading heading line, whatever shape it arrived in.
+  const lines = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+  if (lines.length > 1) lines.shift()
+  return clip(lines.join(' '), n)
 }
 
 /**
@@ -1717,7 +1723,10 @@ const indent = (s: string): string =>
  * part that carries meaning — the titles, the file names, the actual page
  * text — and stops the context running away.
  */
-function renderEvidence(data: unknown, guard?: { score: number; reason: string }): string {
+function renderEvidence(
+  data: unknown,
+  guard?: { score: number; reason: string; suspect?: boolean }
+): string {
   const lines: string[] = []
 
   if (Array.isArray(data)) {
@@ -1747,7 +1756,9 @@ function renderEvidence(data: unknown, guard?: { score: number; reason: string }
     lines.push(
       guard.reason === 'clean' || guard.reason.startsWith('clean')
         ? `injection check: passed (${guard.score.toFixed(2)})`
-        : `injection check: ${guard.reason}`
+        : guard.suspect
+          ? `injection check: read with caution (${guard.score.toFixed(2)}) — ${guard.reason}`
+          : `injection check: ${guard.reason}`
     )
   }
 

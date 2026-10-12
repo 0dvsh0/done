@@ -27,7 +27,8 @@ Single builder. Handles to be published with the submission.
 | Shell | Electron 39 (frameless, custom title bar, tray, native menu) |
 | UI | React 19, TypeScript, Tailwind CSS v4, Motion |
 | State | Main process owns the truth; zustand mirrors it into the renderer over a typed IPC bridge |
-| Agent | **A real loop against a real model** — `openai/gpt-oss-120b` on Groq, structured output, tool-calling, 19 live tools |
+| Agent | **A real loop against real models** — `openai/gpt-oss-120b` on Groq locally, plus Anthropic / Google / xAI / OpenAI per engine, structured output, tool-calling, 19 live tools |
+| Services | **GitHub REST API** — issues, pull requests, releases and commits as structured rows, not a scraped page |
 | Safety | `meta-llama/llama-prompt-guard-2-86m` screens every page before the model reads it |
 | Tracing | **neatlogs** TypeScript SDK 1.1.28 (OTLP/HTTP-protobuf, schema 2) |
 | Context history | **Entire** CLI 0.11.4, `--agent opencode` |
@@ -35,6 +36,99 @@ Single builder. Handles to be published with the submission.
 | Business model | **cfo.ai** — pay per finished period |
 
 ## Build log
+
+### 2026-10-12 — the engines were names, not destinations
+
+Eight defects were reported against the running app. Six were cosmetic. Two were
+structural, and both were the same lie in different clothes.
+
+#### The structural one: every engine was the same model wearing a hat
+
+`routeTask` picked a connector, `ConnectorTag` showed its name in the row, and
+`Router.dispatch` wrote a span explaining why — and then the connector ran
+`runAgentLoop`, which called `createPiModels()` and got **Groq's
+`gpt-oss-120b`**, every time. "Gemini" was the local model asked to imagine it
+was Gemini. "Claude" was the local model asked to imagine it was Claude. The
+persona changed the tone of the answer and nothing else: same weights, same
+tools, same failures.
+
+The consequence the user hit was the clearest possible demonstration of it.
+*"Give me the latest five issues in <repo>"* was answered by opening Chromium,
+waiting for GitHub's client-side router to hydrate, and reading the DOM — the
+local model doing by hand, badly and slowly, what one `GET` returns as
+structured rows.
+
+Three changes, in order of how much they matter:
+
+1. **An engine is now a provider we can actually reach.** `connectors/engines.ts`
+   registers Anthropic, Google, xAI and OpenAI against pi's own model catalogue,
+   so context windows and per-token rates are the provider's published numbers
+   rather than numbers typed into this file. With a key configured the task
+   genuinely runs on that model; without one it falls back to the local model
+   **and says so** — on the task line, on the engine card, and in the receipt,
+   which now carries a `Ran on` row. Naming an engine is a claim, and the run
+   has to earn it.
+
+2. **A GitHub engine, for the questions that are really queries.** `issues`,
+   `pull requests`, `releases` and `commits` are not browsing tasks. The new
+   connector reads the REST API directly and returns real rows — number, title,
+   author, labels, URL. It filters pull requests out of an issues answer
+   (`/issues` returns both, and quietly mixing them makes the count a lie), and
+   it reports which request failed rather than claiming a sync.
+
+3. **Routing is by capability.** A repository question goes to the engine that
+   holds that repository's API. Words that mean *change something* — `fix`,
+   `audit`, `review`, `security` — keep it local, so "fix the latest issue in
+   the repo" still goes to the code engine. Still zero model calls before the
+   work starts.
+
+Verified against the live API (`npm run check:github`, all passing):
+
+```
+PASS  issues: GitHub returned 2 open issues on vercel/next.js.
+PASS  issues: returned real numbered rows — "vercel/next.js — open issues (2)"
+PASS  issues: pull requests were filtered out of an issues answer
+PASS  issues: proof carries real issue URLs
+PASS  a repo that does not exist fails honestly: GitHub 404 — {"message":"Not Found",…}
+PASS  no repo named: There was no repository in that to look up
+```
+
+Routing is now asserted too (`npm run check:route`, 19 cases), including the
+overlapping wording that used to send "review the open issues in this repo and
+fix them" to a lookup engine.
+
+#### The user could not choose
+
+The composer defaulted its engine chip to `automatic`, so every task was routed
+for you, silently. It now defaults to **Pi** — a real engine, visible, changeable
+— and "Let it choose" is an option you pick rather than the state you are put
+in. Each engine in the list shows the model it resolves to before you write
+anything.
+
+#### The rest
+
+| Reported | Cause | Fix |
+|---|---|---|
+| No gap between ⌘ and K | `⌘K` was one string inside one cap | A `Keys` component renders each cap separately, at a 5px gap |
+| Wordmark dot invisible in light mode | `animate={{ backgroundColor: 'var(--color-fg)' }}` — a var cannot be interpolated, so the animation resolved to nothing | The colour is a class now; motion animates only scale and opacity |
+| Task panel read as a cluster | The sentence, a four-part meta line and loose group chips floated on the pane background | One status card (sentence + labelled fact grid + filing), a bordered control bar, and `Steps` / `Timeline` named for what they contain |
+| "It stops and asks…" under the input | It was there | Removed. The Limits sheet is where that belongs, and the title bar still has the button |
+| Money selector broken | A chip that cycled `no spending → $25 → $100 → $500`, printing "Up to no spending" | A real menu with amounts and what each means. The Limits scale gained $5/$25, and now shows the real number when it is off the scale instead of nothing |
+| Roma | A competitor was listed as a provider, with its MCP endpoint hard-coded into Connections | Gone: types, registry, router, composer, Connections, the two dead icons, and the README |
+
+Also found while verifying, not reported: a **UTF-8 BOM in `theme.json`** made
+`JSON.parse` throw, so the app read the file as empty and silently reverted the
+user's chosen appearance to "following the system". `readJson` now strips it.
+
+#### Verified
+
+`npm run typecheck` clean (both projects). `npm run lint` 0 errors (two
+pre-existing `useMemo` warnings in a file this work did not touch).
+`npm run check:route` 19/19. `npm run check:github` 12/12 against the live API.
+`npm run build` clean.
+
+The app was launched and driven through its states in **both** appearances;
+`desktop-app/docs/shots` is regenerated from those runs.
 
 ### 2026-10-11 — the simulated agent is gone
 
@@ -334,8 +428,21 @@ falls back to a stated assumption and the UI labels it *assumed* rather than
 
 ## Known limitations
 
-_Updated 2026-10-11. The 2026-10-10 list below it is kept because the delta is the point._
+_Updated 2026-10-12. The earlier lists below are kept because the delta is the point._
 
+- **Only the local model was exercised end to end.** Anthropic, Google, xAI and
+  OpenAI are wired to real providers with real model ids from pi's catalogue,
+  but this machine has no key for any of them, so every run so far has taken the
+  local fallback — which is the path the UI reports as "Runs locally — no
+  `ANTHROPIC_API_KEY`". The fallback is verified; the provider paths are not yet.
+- **Routing is keyword-shaped, not semantic.** "The open issues on the repo" is
+  recognised by what it is about; a phrasing that carries none of the expected
+  words falls through to the local engine. That is the safe direction — it is
+  the engine that can always act — but it means the delegation is not yet as
+  good as a model call would be. The old model-call router was removed for cost
+  and failure reasons, and that trade stands.
+- **GitHub without a token is rate-limited to 60 requests an hour** and cannot
+  read private repositories. The key is optional and raises both.
 - **A 120B model is not infallible.** It will occasionally chase a dead end. The loop
   bounds it — turn cap, refusal to re-run an unchanged failure, verification before
   "done" — rather than pretending it does not happen.

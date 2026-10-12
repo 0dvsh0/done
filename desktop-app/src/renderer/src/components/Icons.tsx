@@ -185,13 +185,36 @@ export const Kbd = ({
 }): React.JSX.Element => (
   <kbd
     className={cx(
-      'inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-[4px] px-1',
-      'border border-line bg-white/[0.035] font-ui text-[10px] leading-none font-medium text-fg-3',
+      'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[4px] px-1.5',
+      // A key cap is a label, not decoration — it sits on the ramp.
+      'border border-line-2 bg-mark font-ui text-[10.5px] leading-none font-medium text-fg-3',
       className
     )}
   >
     {children}
   </kbd>
+)
+
+/**
+ * A chord, as separate caps.
+ *
+ * `⌘K` written as one string renders as two glyphs butted against each other
+ * with no air between them, which reads as one smudge rather than as a
+ * shortcut. Splitting them into caps with a real gap is what every other app
+ * does and the only reason the pair was legible at all.
+ */
+export const Keys = ({
+  keys,
+  className
+}: {
+  keys: string[]
+  className?: string
+}): React.JSX.Element => (
+  <span className={cx('flex shrink-0 items-center gap-[5px]', className)}>
+    {keys.map((k) => (
+      <Kbd key={k}>{k}</Kbd>
+    ))}
+  </span>
 )
 
 export const Zap = (p: { className?: string }): React.JSX.Element => (
@@ -206,24 +229,10 @@ export const Sparkles = (p: { className?: string }): React.JSX.Element => (
   </S>
 )
 
-export const Link = (p: { className?: string }): React.JSX.Element => (
-  <S className={p.className}>
-    <path d="M8.3 11.7a3.3 3.3 0 0 0 4.7 0l2.5-2.5a3.3 3.3 0 0 0-4.7-4.7L9.6 5.7" />
-    <path d="M11.7 8.3a3.3 3.3 0 0 0-4.7 0l-2.5 2.5a3.3 3.3 0 0 0 4.7 4.7l1.2-1.2" />
-  </S>
-)
-
 export const Bot = (p: { className?: string }): React.JSX.Element => (
   <S className={p.className}>
     <rect x="4" y="6" width="12" height="10" rx="2" />
     <path d="M10 2.5v3.5M7 11h.01M13 11h.01" />
-  </S>
-)
-
-export const Copy = (p: { className?: string }): React.JSX.Element => (
-  <S className={p.className}>
-    <rect x="7" y="7" width="9" height="9" rx="1.5" />
-    <path d="M4 13V5a1 1 0 0 1 1-1h8" />
   </S>
 )
 
@@ -234,3 +243,18 @@ export const Terminal = (p: { className?: string }): React.JSX.Element => (
   </S>
 )
 
+/* ------------------------------------------------------------------ theme */
+
+/** The switch shows the mode you would move *to*, never the one you left. */
+export const Sun = (p: { className?: string }): React.JSX.Element => (
+  <S className={p.className}>
+    <circle cx="10" cy="10" r="3.5" />
+    <path d="M10 2.6v1.6M10 15.8v1.6M17.4 10h-1.6M4.2 10H2.6M15.4 4.6 14.2 5.8M5.8 14.2l-1.2 1.2M15.4 15.4l-1.2-1.2M5.8 5.8 4.6 4.6" />
+  </S>
+)
+
+export const Moon = (p: { className?: string }): React.JSX.Element => (
+  <S className={p.className}>
+    <path d="M16.1 12.5A6.7 6.7 0 0 1 7.5 3.9a6.7 6.7 0 1 0 8.6 8.6Z" />
+  </S>
+)

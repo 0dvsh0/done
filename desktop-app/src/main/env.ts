@@ -11,12 +11,35 @@ import { dirname, join, resolve } from 'node:path'
    packaged build works, with the same code path.
    ========================================================================== */
 
+/**
+ * The keys this app will read out of a `.env`.
+ *
+ * A name that is not on this list is silently ignored, so adding a key here is
+ * what actually makes it configurable.
+ */
 const NAMES = [
   'NEATLOGS_API_KEY',
   'LLM_API_KEY',
   'GROQ_API_KEY',
   'DONE_MODEL',
-  'DONE_CODE_MODEL'
+  'DONE_CODE_MODEL',
+  // Per-engine keys. Optional: an engine without its provider's key runs on
+  // the local model and says so, rather than pretending the work was delegated.
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_API_KEY',
+  'OPENAI_API_KEY',
+  'XAI_API_KEY',
+  'GEMINI_API_KEY',
+  'GOOGLE_API_KEY',
+  // GitHub. Optional — public repositories are readable without it, and the
+  // token only raises the rate limit and reaches private ones.
+  'GITHUB_API_KEY',
+  'GH_TOKEN',
+  // Search. Optional, but real web search needs one of them: every free HTML
+  // search endpoint gates scrapers now, so with neither of these the agent
+  // falls back to Wikipedia.
+  'BRAVE_SEARCH_API_KEY',
+  'TAVILY_API_KEY'
 ] as const
 
 export type KeyName = (typeof NAMES)[number]

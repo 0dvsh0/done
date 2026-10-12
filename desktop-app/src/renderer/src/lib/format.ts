@@ -63,3 +63,17 @@ export const initials = (s: string): string =>
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? '')
     .join('')
+
+/** The engines, named the way the user would name them. */
+const ENGINE_NAMES: Record<string, string> = {
+  auto: 'automatic',
+  pi: 'Pi',
+  grok: 'Grok',
+  claude: 'Claude',
+  chatgpt: 'ChatGPT',
+  muse: 'Muse',
+  gemini: 'Gemini',
+  github: 'GitHub'
+}
+
+export const connectorLabel = (id: string): string => ENGINE_NAMES[id] ?? id

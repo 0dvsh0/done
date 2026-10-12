@@ -5,9 +5,11 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { shutdown, Store } from './agent'
 import { entire, tracing } from './integrations'
-import { hydrateEnv } from './env'
+import { hydrateEnv, envKey } from './env'
 import { economics } from './finance'
+import { discoverModels } from './llm'
 import type { ControlAction, CreateOptions, Limits } from '../shared/types'
+import { themeBackground, themeFile, type Theme, type ThemeChoice } from '../shared/theme'
 
 /* ==========================================================================
    Paths & persistence
@@ -22,10 +24,13 @@ function ensureDir(): void {
 }
 
 function readJson(file: string): Record<string, unknown> | null {
+  if (!existsSync(file)) return null
   try {
-    return existsSync(file)
-      ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)
-      : null
+    // A UTF-8 BOM is invisible and `JSON.parse` rejects it, so a preferences
+    // file written by a Windows text editor silently reads as empty — which
+    // for `theme.json` means the user's chosen appearance quietly reverts to
+    // following the system, with no error anywhere to explain it.
+    return JSON.parse(readFileSync(file, 'utf8').replace(/^\uFEFF/, '')) as Record<string, unknown>
   } catch {
     return null
   }
@@ -37,6 +42,29 @@ interface WindowBounds {
   x?: number
   y?: number
   maximized?: boolean
+}
+
+/**
+ * The chosen appearance, resolved to what should actually be painted.
+ *
+ * `system` is deliberately resolved here and not stored: the OS setting is
+ * read live, so toggling the Mac between light and dark moves the window with
+ * it, while an explicit choice stays exactly as it was left.
+ */
+function readTheme(): { choice: ThemeChoice; resolved: Theme } {
+  const raw = readJson(themeFile())?.['choice']
+  const choice: ThemeChoice = raw === 'dark' || raw === 'light' || raw === 'system' ? raw : 'system'
+  const resolved: Theme =
+    choice === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : choice
+  return { choice, resolved }
+}
+
+function writeTheme(choice: ThemeChoice): void {
+  try {
+    writeFileSync(themeFile(), JSON.stringify({ choice }), 'utf8')
+  } catch {
+    /* an unwritable preferences file costs you your mode, not the app */
+  }
 }
 
 function readBounds(): WindowBounds {
@@ -68,7 +96,9 @@ function createWindow(): BrowserWindow {
     minHeight: 620,
     show: false,
     frame: false,
-    backgroundColor: '#09090a',
+    // Painted by Electron before the renderer exists, so the window opens in
+    // the right ink instead of flashing the other one and correcting.
+    backgroundColor: themeBackground(readTheme().resolved),
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     trafficLightPosition: isMac ? { x: 18, y: 18 } : undefined,
     ...(process.platform === 'linux' ? { icon } : {}),
@@ -280,11 +310,20 @@ function buildMenu(getWindow: () => BrowserWindow | null): void {
    ========================================================================== */
 
 ensureDir()
-nativeTheme.themeSource = 'dark'
+/* `themeSource` follows the app's own choice, so native-drawn surfaces —
+   scrollbars, text selection menus, the caret — are never the other mode.
+   Pinning it to 'dark' was what made light mode impossible to do honestly. */
+nativeTheme.themeSource = readTheme().resolved
 hydrateEnv()
 process.env.DONE_REPO_IS_GIT = existsSync(join(app.getAppPath(), '.git')) ? '1' : ''
 
 const store = new Store()
+
+/* Settles the brain pool against the provider's own catalogue before the
+   first task is written down, so an engine card never promises a model this
+   key cannot reach. Not awaited: a slow probe must not delay the window, and
+   the pool is correct without it. */
+void discoverModels()
 let windowRef: BrowserWindow | null = null
 let saveTimer: NodeJS.Timeout | null = null
 
@@ -321,7 +360,11 @@ function resetData(): void {
 function boot(): void {
   // No fabricated history. The app opens on whatever you actually did last
   // time, and on an empty list if there isn't any.
-  const saved = process.env['DONE_FRESH'] ? null : readJson(stateFile)
+  // Compared rather than tested for truthiness: DONE_FRESH=0 is the natural
+  // thing to write, and treating it as "set" silently threw away the saved
+  // list.
+  const fresh = /^(1|true|yes)$/i.test(process.env['DONE_FRESH'] ?? '')
+  const saved = fresh ? null : readJson(stateFile)
   if (saved) {
     store.restore(readFileSync(stateFile, 'utf8'))
     // Reserialize in case legacy seed tasks were stripped during restore
@@ -406,6 +449,13 @@ function registerIpc(): void {
 
   ipcMain.handle('app:economics', () => economics(store.spans))
 
+  // Whether a real search backend is configured. The UI says so out loud,
+  // because a search that silently returns nothing is indistinguishable from a
+  // task that cannot be done.
+  ipcMain.handle('app:search-configured', () =>
+    Boolean(envKey('BRAVE_SEARCH_API_KEY') || envKey('TAVILY_API_KEY'))
+  )
+
   ipcMain.handle('task:checkpoint', async (_e, id: string) => {
     const task = store.byId(id)
     if (!task) return { ok: false, id: null, message: 'That task is gone.' }
@@ -458,7 +508,11 @@ function registerIpc(): void {
 
   ipcMain.handle(
     'connector:config',
-    (_e, id: import('../shared/types').ConnectorId, config: { apiKey?: string; endpoint?: string }) => {
+    (
+      _e,
+      id: import('../shared/types').ConnectorId,
+      config: { apiKey?: string; endpoint?: string }
+    ) => {
       return store.setConnectorConfig(id, config)
     }
   )
@@ -476,6 +530,14 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('window:is-maximized', () => Boolean(windowRef?.isMaximized()))
+
+  ipcMain.handle('theme:set', (_e, payload: { choice: ThemeChoice; resolved: Theme }) => {
+    writeTheme(payload.choice)
+    nativeTheme.themeSource = payload.resolved
+    // The window's own background has to move too, or a resize or a
+    // maximised repaint flashes the old ink for a frame.
+    windowRef?.setBackgroundColor(themeBackground(payload.resolved))
+  })
 }
 
 const gotLock = app.requestSingleInstanceLock()
@@ -494,6 +556,17 @@ if (!gotLock) {
 
     app.on('browser-window-created', (_e, window) => {
       optimizer.watchWindowShortcuts(window)
+    })
+
+    /* Following the OS means following it *while running*. Without this,
+       flipping the Mac to light at sunset would leave a dark window on screen
+       with no way to move it short of restarting the app. */
+    nativeTheme.on('updated', () => {
+      if (readTheme().choice !== 'system') return
+      const resolved: Theme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+      nativeTheme.themeSource = resolved
+      windowRef?.setBackgroundColor(themeBackground(resolved))
+      windowRef?.webContents.send('theme:changed', resolved)
     })
 
     boot()

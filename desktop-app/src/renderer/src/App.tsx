@@ -3,19 +3,25 @@ import { useEffect } from 'react'
 import { useHotkeys, useMenuBridge } from './hooks'
 import { CommandBar } from './components/CommandBar'
 import { Detail } from './components/Detail'
-import { dotStyles } from './components/Dot'
 import { Sheets } from './components/Sheets'
 import { StatusBar, DayHeader } from './components/StatusBar'
 import { TaskList, Composer } from './components/TaskList'
 import { TitleBar, Toast } from './components/TitleBar'
 import { TraceSheet } from './components/TraceSheet'
 import { useUI, useWorld, groupNames } from './store'
+import { watchSystemTheme } from './theme'
 
 export default function App(): React.JSX.Element {
   const state = useWorld((s) => s.state)
   const setState = useWorld((s) => s.setState)
   const openId = useUI((s) => s.openId)
   const traceFor = useUI((s) => s.traceFor)
+
+  /* The first frame's ink was settled before React mounted (see `main.tsx`).
+     This only keeps the choice honest while the window stays open. */
+  useEffect(() => {
+    watchSystemTheme()
+  }, [])
 
   /* One subscription for the whole app. The main process owns the truth;
      the renderer only draws it. */
@@ -29,8 +35,6 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-ink-0 text-fg">
-      <style>{dotStyles}</style>
-
       {state ? (
         <>
           <TitleBar state={state} />
@@ -38,7 +42,7 @@ export default function App(): React.JSX.Element {
           <div className="flex min-h-0 flex-1">
             <main className="flex min-w-0 flex-1 flex-col">
               <DayHeader state={state} />
-              <Composer limits={state.limits} groups={groupNames(state)} />
+              <Composer groups={groupNames(state)} engines={state.integrations.connectors} />
               <TaskList state={state} />
             </main>
 
@@ -81,9 +85,9 @@ export default function App(): React.JSX.Element {
 function Booting(): React.JSX.Element {
   return (
     <div className="flex flex-1 items-center justify-center">
-      <div className="flex items-baseline text-[15px] font-medium tracking-[-0.045em] text-fg-4">
+      <div className="flex items-baseline text-[15px] font-medium tracking-[-0.045em] text-fg-3">
         done
-        <span className="ml-[0.09em] inline-block h-[4.5px] w-[4.5px] animate-pulse rounded-full bg-fg-4" />
+        <span className="ml-[0.09em] inline-block h-[4.5px] w-[4.5px] animate-pulse rounded-full bg-fg-3" />
       </div>
     </div>
   )

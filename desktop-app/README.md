@@ -89,16 +89,18 @@ src/
   main/
     index.ts               window, tray, menu, IPC, persistence
     agent.ts               the 2-phase loop: route → dispatch → execute → verify
-    connectors/            Connected Agents Network (Roma style):
-      router.ts            LLM Dispatcher Brain & context enricher
-      registry.ts          connectors registry & dynamic configuration
-      claude.ts            Claude & Claude Code (coding & terminal)
-      grok.ts              xAI Grok (real-time web intelligence)
-      chatgpt.ts           ChatGPT & Codex (deep reasoning & math)
-      muse.ts              Muse Spark (creative ideation & visual sparks)
-      gemini.ts            Gemini CLI (1M+ token whole-repo context)
-      roma.ts              Roma MCP Server (api.roma.app/mcp bus)
-      pi.ts                Pi Agent Core (19 native desktop tools)
+    connectors/            the engines a task can be handed to
+      router.ts            picks the engine from the shape of the request
+      engines.ts           which model actually serves each engine
+      registry.ts          engine registry & dynamic configuration
+      claude.ts            Claude — code changed and run
+      grok.ts              Grok — what is true right now
+      chatgpt.ts           ChatGPT — worked through step by step
+      muse.ts              Muse — ideas, landed in a real file
+      gemini.ts            Gemini — whole repositories, read wide
+      github.ts            GitHub — issues, pull requests, releases via the API
+      pi.ts                Pi — 19 native desktop tools, local first
+      loop.ts              the one loop every engine runs
     pi.ts                  @earendil-works/pi-agent-core & @earendil-works/pi-ai runtime
     tools/                 the nineteen real tools
     integrations.ts        neatlogs tracing + the Entire CLI bridge
@@ -106,28 +108,42 @@ src/
   preload/index.ts         the contextBridge API
   renderer/src/
     App.tsx                layout
-    components/            TitleBar, TaskList, Detail, Sheets (Connected Agents Grid), CommandBar…
+    components/            TitleBar, TaskList, Detail, Sheets, CommandBar…
 ```
 
-### Connected Agents & Intelligent Routing (Roma Style)
+### Engines, and which model runs them
 
-We don't force a single monolithic LLM to execute every task. Following the paradigm of **Roma** ([roma.app/agents](https://roma.app/agents)), Done acts as a shared list and intelligent coordinator across specialized connected agents:
+Done. does not force one model to do every task. Each engine is a **provider we
+can actually reach** plus a set of instructions about how to approach the work:
 
-1. **The LLM as Intelligent Router & UI Harmonizer:**
-   - Evaluates the user's task prompt, deadline, budget, and local repository context.
-   - Intelligently chooses the best connector (or honors manual user selection from the `Via` picker):
-     - **Claude Code**: Multi-file refactoring, code editing, terminal commands, test suites.
-     - **xAI Grok**: Live web intelligence, breaking trends, rapid unfiltered analysis.
-     - **ChatGPT & Codex**: Structured multi-step reasoning, mathematical deduction, analytical synthesis.
-     - **Muse Spark**: Divergent creative ideation, product metaphors, UX naming.
-     - **Gemini CLI**: Whole-codebase comprehension across 1M+ tokens.
-     - **Roma MCP Server**: Universal Model Context Protocol sync (`https://api.roma.app/mcp`) for cross-agent task buses.
-     - **Pi Agent Core**: Local desktop tools (Chromium DevTools, shell, clipboard, file system).
-   - Generates trace spans (`router.dispatch`) explaining *why* the task was routed to that agent.
-   - Cleans up and harmonizes execution output so the user enjoys a serene, peaceful UI without raw JSON clutter.
+| Engine | Runs on | Reached with |
+|---|---|---|
+| **Pi** | `openai/gpt-oss-120b` on Groq | `LLM_API_KEY` / `GROQ_API_KEY` |
+| **Claude** | `claude-sonnet-5` on Anthropic | `ANTHROPIC_API_KEY` |
+| **Gemini** | `gemini-2.5-pro` on Google | `GEMINI_API_KEY` |
+| **Grok** | `grok-4.5` on xAI | `XAI_API_KEY` |
+| **ChatGPT** | `gpt-5.4-mini` on OpenAI | `OPENAI_API_KEY` |
+| **Muse** | the local model | — |
+| **GitHub** | the GitHub REST API | optional token |
 
-2. **The Execution & Verification Loop:**
-   - The selected connector executes with live streaming tokens (`thought` and `story`).
+An engine whose provider key is not configured falls back to the local model
+**and says so on the task**, in Connections, and in the receipt. Naming an
+engine is a claim, and the run has to earn it.
+
+1. **You choose the engine.** The composer's `On` menu names the engine and the
+   model it resolves to before you write anything. "Let it choose" is there, as
+   an option you pick — not as the state you are put in.
+
+2. **Routing is by capability, not by vibes.** No model call happens before the
+   work starts: the shape of the request decides, instantly and for free. A
+   question a service can answer in one request — *the open issues on a
+   repository* — goes to the engine holding that service's API, rather than to
+   the local model opening a browser and reading the DOM to produce a
+   structured answer by hand. Words that mean "change something" (*fix*,
+   *audit*, *review*) keep it local.
+
+3. **The Execution & Verification Loop:**
+   - The selected engine executes with live streaming tokens (`thought` and `story`).
    - Every reversible and irreversible action honors the user's spending limits and approval guards.
    - Strict independent verification confirms evidence against the user goal before completing and sealing a verified receipt.
 

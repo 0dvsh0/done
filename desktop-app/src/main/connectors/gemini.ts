@@ -1,13 +1,19 @@
 import type { AgentConnector, ConnectorContext, ConnectorResult } from './types'
 import type { ConnectorInfo } from '../../shared/types'
-import { createPiModels, getPiModel } from '../pi'
+import { runAgentLoop, type Persona } from './loop'
 
+/**
+ * Gemini — wide context.
+ *
+ * Chosen when the thing to understand is bigger than one file: whole
+ * repositories, large documents, many sources at once.
+ */
 export class GeminiConnector implements AgentConnector {
   id = 'gemini' as const
-  name = 'Gemini CLI'
-  blurb = 'One command in the terminal. Massive context window and deep repository comprehension.'
+  name = 'Gemini'
+  blurb = 'Whole-repository and large-document work, read across many files at once.'
   category = 'code' as const
-  badge = '✦ Gemini'
+  badge = 'Gemini'
   icon = 'gemini'
 
   private customKey: string | null = null
@@ -19,11 +25,7 @@ export class GeminiConnector implements AgentConnector {
   }
 
   isConfigured(): boolean {
-    return Boolean(
-      this.customKey ||
-      process.env['GEMINI_API_KEY'] ||
-      process.env['LLM_API_KEY']
-    )
+    return Boolean(this.customKey || process.env['GEMINI_API_KEY'] || process.env['LLM_API_KEY'])
   }
 
   getInfo(): ConnectorInfo {
@@ -36,85 +38,27 @@ export class GeminiConnector implements AgentConnector {
       icon: this.icon,
       connected: this.isConfigured(),
       description:
-        'Gemini CLI powers large context analysis, multi-modal comprehension, and whole-codebase understanding.',
+        'Large-context comprehension across a whole repository or a pile of documents at once. Reads widely first, then reports what it found with file paths.',
       endpoint: this.customEndpoint || 'https://generativelanguage.googleapis.com',
       requiresKey: 'GEMINI_API_KEY'
     }
   }
 
-  async execute(prompt: string, ctx: ConnectorContext): Promise<ConnectorResult> {
-    ctx.setTaskLine('✦ [Gemini CLI] Ingesting repository context into 1M context window...')
-    ctx.setTaskProgress(0.25)
-
-    const models = createPiModels()
-    const model = getPiModel()
-
-    let accumulated = ''
-    try {
-      const responseStream = models.streamSimple(
-        model,
-        {
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: [
-                    `You are Gemini CLI, a connected agent inside Done with massive context capabilities.`,
-                    `Specialty: Comprehensive architectural analysis, repository-wide insights, and precise synthesis.`,
-                    '',
-                    `Goal: ${prompt}`,
-                    '',
-                    `Provide your complete, structured analysis.`
-                  ].join('\n')
-                }
-              ],
-              timestamp: Date.now()
-            }
-          ]
-        },
-        { maxRetries: 3 }
-      )
-
-      for await (const chunk of responseStream) {
-        if (chunk.type === 'text_delta') {
-          accumulated += chunk.delta
-          const lastLine = accumulated.trim().split('\n').filter(Boolean).pop() ?? ''
-          if (lastLine) {
-            ctx.setTaskLine(`✦ [Gemini CLI] ${lastLine.slice(0, 110)}`)
-          }
-        }
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      throw new Error(`Gemini CLI error: ${msg}`)
+  execute(prompt: string, ctx: ConnectorContext): Promise<ConnectorResult> {
+    const persona: Persona = {
+      opening: 'Reading across the whole thing.',
+      identity: [
+        'You are Gemini, the wide-context side of this app.',
+        'You are patient with large bodies of material and precise about what is in them.'
+      ],
+      craft: [
+        'Map the territory first — list the relevant files before reading any of them closely.',
+        'Cite the path for every claim you make about the codebase.',
+        'Go wide before going deep. Do not stop at the first file that looks relevant.'
+      ],
+      maxTurns: 14,
+      engine: 'gemini'
     }
-
-    ctx.setTaskProgress(0.95)
-    ctx.pushHistory({
-      tool: 'gemini_cli',
-      ok: true,
-      summary: `Gemini CLI analysis: ${prompt.slice(0, 80)}`,
-      detail: accumulated,
-      args: 'context_window="1M"'
-    })
-
-    const summaryLine = accumulated.split('\n').filter(Boolean)[0] || 'Gemini CLI analysis complete.'
-
-    return {
-      ok: true,
-      summary: summaryLine.slice(0, 160),
-      detail: accumulated,
-      receiptDraft: {
-        lines: [
-          ['Connected Agent', 'Gemini CLI (Google)'],
-          ['Insight', summaryLine.slice(0, 80)],
-          ['Context Mode', 'Whole-repo comprehension']
-        ],
-        proof: ['google.dev/gemini', 'verified tokens'],
-        undo: null
-      }
-    }
+    return runAgentLoop(persona, ctx, prompt)
   }
 }

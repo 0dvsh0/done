@@ -1,6 +1,20 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import { existsSync, readFileSync } from 'node:fs'
 import type { AppState, ControlAction, DoneApi, Limits } from '../shared/types'
+import { themeFile, type ThemeChoice } from '../shared/theme'
+
+/** The stored appearance, or `system` the first time the app is ever opened. */
+function readInitialTheme(): ThemeChoice {
+  try {
+    const raw = existsSync(themeFile())
+      ? (JSON.parse(readFileSync(themeFile(), 'utf8')) as string)
+      : null
+    return raw === 'dark' || raw === 'light' || raw === 'system' ? raw : 'system'
+  } catch {
+    return 'system'
+  }
+}
 
 const api: DoneApi = {
   getState: () => ipcRenderer.invoke('state:get'),
@@ -25,13 +39,20 @@ const api: DoneApi = {
   revealData: () => ipcRenderer.invoke('app:reveal-data'),
   openExternal: (url: string) => ipcRenderer.invoke('app:open-external', url),
   setConnectorConfig: (id, config) => ipcRenderer.invoke('connector:config', id, config),
-  windowAction: (action) => ipcRenderer.invoke('window:action', action)
+  windowAction: (action) => ipcRenderer.invoke('window:action', action),
+  setTheme: (choice, resolved) => ipcRenderer.invoke('theme:set', { choice, resolved })
 }
 
 /** Escape hatches used by the app itself (menus, devtools), not by UI code. */
 const system = {
   ...electronAPI,
   platform: process.platform,
+  /**
+   * Read synchronously from disk before the window is shown, so the first
+   * painted frame is already in the right ink. The renderer must never have
+   * to guess and then correct itself — that correction is a visible flash.
+   */
+  initialTheme: readInitialTheme(),
   onMenu: (
     channel: 'menu:new' | 'menu:command' | 'menu:settings' | 'menu:trace',
     cb: () => void
@@ -46,7 +67,14 @@ const system = {
     return () => ipcRenderer.removeListener('window:maximized', listener)
   },
   isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+  /** The OS changed appearance underneath a 'system' theme. */
+  onThemeChanged: (cb: (resolved: 'dark' | 'light') => void) => {
+    const listener = (_e: unknown, v: 'dark' | 'light'): void => cb(v)
+    ipcRenderer.on('theme:changed', listener)
+    return () => ipcRenderer.removeListener('theme:changed', listener)
+  },
   economics: () => ipcRenderer.invoke('app:economics'),
+  searchConfigured: () => ipcRenderer.invoke('app:search-configured'),
   reset: () => ipcRenderer.invoke('app:reset'),
   entireSetup: () => ipcRenderer.invoke('entire:setup'),
   entireRefresh: () => ipcRenderer.invoke('entire:refresh')

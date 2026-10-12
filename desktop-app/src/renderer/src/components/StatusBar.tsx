@@ -12,13 +12,13 @@ export function StatusBar({ state }: { state: AppState }): React.JSX.Element {
   const { ledger, integrations } = state
 
   return (
-    <footer className="flex h-[26px] shrink-0 items-center gap-3 border-t border-line bg-ink-0 px-4 text-[11px] text-fg-4 select-none">
+    <footer className="flex h-[26px] shrink-0 items-center gap-3 border-t border-line bg-ink-0 px-4 text-[11px] text-fg-3 select-none">
       <span className="num">
         {ledger.spent > 0
           ? `Spent ${money(ledger.spent)} today, all approved by you`
           : 'Spent nothing today'}
       </span>
-      <span className="text-fg-6 text-fg-5">·</span>
+      <span className="text-fg-4">·</span>
       <span className="num">Saved you about {minutes(ledger.minutes)}</span>
 
       <div className="ml-auto flex items-center gap-3">
@@ -52,7 +52,7 @@ export function StatusBar({ state }: { state: AppState }): React.JSX.Element {
                 : 'Entire · not installed'
           }
         />
-        <span className="num text-fg-5">
+        <span className="num text-fg-4">
           {integrations.neatlogs.lastExportAt
             ? `traced ${ago(integrations.neatlogs.lastExportAt)}`
             : ''}
@@ -75,15 +75,15 @@ function Chip({
     <button
       type="button"
       onClick={onClick}
-      className="no-drag inline-flex items-center gap-1.5 rounded-[5px] px-1 py-[1px] text-fg-4 transition-colors hover:bg-white/[0.05] hover:text-fg-3"
+      className="no-drag inline-flex items-center gap-1.5 rounded-[5px] px-1 py-[1px] text-fg-3 transition-colors hover:bg-veil hover:text-fg-2"
     >
       <motion.span
         aria-hidden="true"
         initial={false}
-        animate={{ opacity: tone === 'off' ? 0.35 : 1 }}
+        animate={{ opacity: tone === 'off' ? 0.55 : 1 }}
         className={cx(
           'h-[4px] w-[4px] rounded-full',
-          tone === 'on' ? 'bg-calm' : tone === 'idle' ? 'bg-needs/70' : 'bg-fg-4'
+          tone === 'on' ? 'bg-calm' : tone === 'idle' ? 'bg-needs' : 'bg-fg-4'
         )}
       />
       <span className="num">{label}</span>
@@ -130,14 +130,14 @@ export function DayHeader({ state }: { state: AppState }): React.JSX.Element {
     <div className="column pt-7 pb-4">
       <h1 className="voice flex items-baseline gap-3 text-[27px] leading-none text-fg">
         {dayName}
-        <span className="num text-[12px] font-normal text-fg-5">{date}</span>
+        <span className="num text-[12.5px] font-normal text-fg-3">{date}</span>
       </h1>
       <motion.p
         key={summary}
         initial={{ opacity: 0, y: 3 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-        className={cx('mt-2 text-[13.5px]', state.allPaused ? 'text-needs/80' : 'text-fg-3')}
+        className={cx('mt-2 text-[13.5px]', state.allPaused ? 'text-needs' : 'text-fg-3')}
         aria-live="polite"
       >
         {summary}
