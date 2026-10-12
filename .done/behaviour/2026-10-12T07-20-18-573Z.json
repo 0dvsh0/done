@@ -1,0 +1,17 @@
+{
+  "title": "limits: spend",
+  "summary": "Changed what the agent may do on its own — spend.",
+  "at": "2026-10-12T07:20:18.573Z",
+  "behaviour": {
+    "before": {
+      "spend": 0,
+      "messages": true,
+      "quiet": false
+    },
+    "after": {
+      "spend": 1,
+      "messages": true,
+      "quiet": false
+    }
+  }
+}
